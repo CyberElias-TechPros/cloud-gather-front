@@ -28,7 +28,23 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Shield, Key, Bell, UserCircle, CreditCard, HelpCircle } from 'lucide-react';
+import { 
+  Lock, 
+  Shield, 
+  Key, 
+  Bell, 
+  UserCircle, 
+  CreditCard, 
+  HelpCircle, 
+  Settings, 
+  Upload, 
+  Share2 
+} from 'lucide-react';
+import { AdvancedStorageSettings } from '@/components/settings/AdvancedStorageSettings';
+import { SecurityPrivacySettings } from '@/components/settings/SecurityPrivacySettings';
+import { FileSharingSettings } from '@/components/settings/FileSharingSettings';
+import { UploadPreferences } from '@/components/settings/UploadPreferences';
+import { NotificationSettings } from '@/components/settings/NotificationSettings';
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState("account");
@@ -52,14 +68,13 @@ const SettingsPage = () => {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [sessionTimeout, setSessionTimeout] = useState("30");
-
-  // Billing information
-  const billingInfo = {
-    plan: "Free",
-    storage: "30 GB",
-    expires: "Never",
-    features: ["3 providers", "Basic encryption", "2GB file size limit"]
-  };
+  const [defaultSharePermission, setDefaultSharePermission] = useState("view");
+  const [linkExpirationDays, setLinkExpirationDays] = useState(7);
+  
+  // Advanced storage settings
+  const [splittingEnabled, setSplittingEnabled] = useState(true);
+  const [maxChunkSize, setMaxChunkSize] = useState(25);
+  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState("aes256");
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -93,14 +108,28 @@ const SettingsPage = () => {
                 className="justify-start px-4 py-2 data-[state=active]:bg-muted"
               >
                 <Shield className="h-4 w-4 mr-2" />
-                Security
+                Security & Privacy
               </TabsTrigger>
               <TabsTrigger 
                 value="storage" 
                 className="justify-start px-4 py-2 data-[state=active]:bg-muted"
               >
                 <Lock className="h-4 w-4 mr-2" />
-                Storage
+                Storage & Optimization
+              </TabsTrigger>
+              <TabsTrigger 
+                value="uploads" 
+                className="justify-start px-4 py-2 data-[state=active]:bg-muted"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Preferences
+              </TabsTrigger>
+              <TabsTrigger 
+                value="sharing" 
+                className="justify-start px-4 py-2 data-[state=active]:bg-muted"
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                File Sharing
               </TabsTrigger>
               <TabsTrigger 
                 value="notifications" 
@@ -221,236 +250,54 @@ const SettingsPage = () => {
           </TabsContent>
           
           <TabsContent value="security" className="m-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
-                <CardDescription>
-                  Manage your account security and authentication methods
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">Two-Factor Authentication</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Add an extra layer of security to your account
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={twoFactorEnabled} 
-                      onCheckedChange={setTwoFactorEnabled} 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">Biometric Authentication</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Use fingerprint or face recognition to login
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={biometricEnabled} 
-                      onCheckedChange={setBiometricEnabled} 
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="session-timeout">Session Timeout (minutes)</Label>
-                    <Select 
-                      value={sessionTimeout}
-                      onValueChange={setSessionTimeout}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select session timeout" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">15 minutes</SelectItem>
-                        <SelectItem value="30">30 minutes</SelectItem>
-                        <SelectItem value="60">1 hour</SelectItem>
-                        <SelectItem value="120">2 hours</SelectItem>
-                        <SelectItem value="1440">24 hours</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Password</h3>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
-                    <Input id="current-password" type="password" />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-password">New Password</Label>
-                      <Input id="new-password" type="password" />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password">Confirm New Password</Label>
-                      <Input id="confirm-password" type="password" />
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <Button>Update Security Settings</Button>
-                </div>
-              </CardContent>
-            </Card>
+            <SecurityPrivacySettings 
+              twoFactorEnabled={twoFactorEnabled}
+              setTwoFactorEnabled={setTwoFactorEnabled}
+              biometricEnabled={biometricEnabled}
+              setBiometricEnabled={setBiometricEnabled}
+              sessionTimeout={sessionTimeout}
+              setSessionTimeout={setSessionTimeout}
+              defaultSharePermission={defaultSharePermission}
+              setDefaultSharePermission={setDefaultSharePermission}
+              linkExpirationDays={linkExpirationDays}
+              setLinkExpirationDays={setLinkExpirationDays}
+            />
           </TabsContent>
           
           <TabsContent value="storage" className="m-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Storage Settings</CardTitle>
-                <CardDescription>
-                  Configure how your files are stored and managed
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">File Encryption</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Encrypt files before uploading to providers
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={encryptionEnabled} 
-                      onCheckedChange={setEncryptionEnabled} 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">File Deduplication</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Prevent storing identical files twice
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={deduplicationEnabled} 
-                      onCheckedChange={setDeduplicationEnabled} 
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label>File Compression Level</Label>
-                      <span className="text-sm text-muted-foreground">
-                        {compressionLevel}%
-                      </span>
-                    </div>
-                    <Slider
-                      value={[compressionLevel]}
-                      onValueChange={(values) => setCompressionLevel(values[0])}
-                      max={100}
-                      step={10}
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>None</span>
-                      <span>Maximum</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label>Offline Cache Size (MB)</Label>
-                      <span className="text-sm text-muted-foreground">
-                        {cacheSize} MB
-                      </span>
-                    </div>
-                    <Slider
-                      value={[cacheSize]}
-                      onValueChange={(values) => setCacheSize(values[0])}
-                      min={100}
-                      max={2000}
-                      step={100}
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>100 MB</span>
-                      <span>2 GB</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <Button>Save Storage Settings</Button>
-                </div>
-              </CardContent>
-            </Card>
+            <AdvancedStorageSettings 
+              encryptionEnabled={encryptionEnabled}
+              setEncryptionEnabled={setEncryptionEnabled}
+              deduplicationEnabled={deduplicationEnabled}
+              setDeduplicationEnabled={setDeduplicationEnabled}
+              compressionLevel={compressionLevel}
+              setCompressionLevel={setCompressionLevel}
+              cacheSize={cacheSize}
+              setCacheSize={setCacheSize}
+              splittingEnabled={splittingEnabled}
+              setSplittingEnabled={setSplittingEnabled}
+              maxChunkSize={maxChunkSize}
+              setMaxChunkSize={setMaxChunkSize}
+              encryptionAlgorithm={encryptionAlgorithm}
+              setEncryptionAlgorithm={setEncryptionAlgorithm}
+            />
+          </TabsContent>
+          
+          <TabsContent value="uploads" className="m-0">
+            <UploadPreferences />
+          </TabsContent>
+          
+          <TabsContent value="sharing" className="m-0">
+            <FileSharingSettings />
           </TabsContent>
           
           <TabsContent value="notifications" className="m-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Settings</CardTitle>
-                <CardDescription>
-                  Control when and how you receive notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">File Upload Notifications</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Get notified when files are uploaded
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={notifyOnUploads} 
-                      onCheckedChange={setNotifyOnUploads} 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">File Sharing Notifications</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Get notified when files are shared with you
-                      </span>
-                    </div>
-                    <Switch 
-                      checked={notifyOnShares} 
-                      onCheckedChange={setNotifyOnShares} 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">Storage Limit Alerts</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Get notified when storage is almost full
-                      </span>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="block mb-1">Weekly Storage Report</Label>
-                      <span className="text-sm text-muted-foreground">
-                        Receive weekly summary of your storage usage
-                      </span>
-                    </div>
-                    <Switch defaultChecked={false} />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <Button>Save Notification Preferences</Button>
-                </div>
-              </CardContent>
-            </Card>
+            <NotificationSettings
+              notifyOnUploads={notifyOnUploads}
+              setNotifyOnUploads={setNotifyOnUploads}
+              notifyOnShares={notifyOnShares}
+              setNotifyOnShares={setNotifyOnShares}
+            />
           </TabsContent>
           
           <TabsContent value="billing" className="m-0">
@@ -468,22 +315,22 @@ const SettingsPage = () => {
                       <div>
                         <h3 className="font-medium">Current Plan</h3>
                         <div className="text-sm text-muted-foreground mt-1">
-                          {billingInfo.plan} - {billingInfo.storage} storage
+                          Free - 30 GB storage
                         </div>
                         
                         <div className="mt-3 text-sm">
                           <div className="font-medium">Features:</div>
                           <ul className="list-disc list-inside mt-1 text-muted-foreground">
-                            {billingInfo.features.map((feature, index) => (
-                              <li key={index}>{feature}</li>
-                            ))}
+                            <li>3 storage providers</li>
+                            <li>Basic encryption</li>
+                            <li>2 GB max file size</li>
                           </ul>
                         </div>
                       </div>
                       
                       <div>
                         <Badge variant="outline" className="mb-2">
-                          {billingInfo.expires === 'Never' ? 'Free Plan' : `Expires: ${billingInfo.expires}`}
+                          Free Plan
                         </Badge>
                       </div>
                     </div>
