@@ -9,16 +9,16 @@ import {
   ChevronRight, 
   Cloud, 
   FileText, 
-  FolderOpen, 
   Grid, 
   HardDrive, 
   Home, 
-  PlusCircle, 
+  Plus, 
   Settings, 
   Share2, 
   Star, 
   Trash2, 
-  Upload 
+  Upload, 
+  Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +36,7 @@ export const Sidebar = ({ open, onToggle }: SidebarProps) => {
     { label: 'Shared', icon: Share2, path: '/shared' },
     { label: 'Starred', icon: Star, path: '/starred' },
     { label: 'Recents', icon: Clock, path: '/recents' },
-    { label: 'Trash', icon: Trash2, path: '/trash' },
+    { label: 'Team', icon: Users, path: '/team' },
   ];
   
   const storageLinks = [

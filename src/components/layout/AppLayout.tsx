@@ -3,6 +3,7 @@ import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Toaster } from '@/components/ui/sonner';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -30,6 +31,7 @@ export const AppLayout = ({ children, title = 'CloudUnity' }: AppLayoutProps) =>
           {children}
         </main>
       </div>
+      <Toaster position="top-right" />
     </div>
   );
 };
