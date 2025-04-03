@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -23,6 +22,7 @@ interface UploadProgressProps {
 }
 
 export const UploadProgress = ({ uploads, onCancel, onRetry, onClear }: UploadProgressProps) => {
+  
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     

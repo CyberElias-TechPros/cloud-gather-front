@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileGrid } from '@/components/files/FileGrid';
@@ -51,7 +50,6 @@ const FilesPage = () => {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [newFolderName, setNewFolderName] = useState('');
   
-  // Sample files data
   const files: FileItem[] = [
     {
       id: '1',
@@ -178,19 +176,17 @@ const FilesPage = () => {
   };
   
   const handleFilesSelected = (files: File[]) => {
-    // Simulate file upload
     const newUploads: UploadItem[] = files.map((file, index) => ({
       id: `upload-${Date.now()}-${index}`,
       fileName: file.name,
       size: file.size,
       progress: 0,
-      status: 'uploading'
+      status: 'uploading' as const
     }));
     
     setUploadItems([...newUploads, ...uploadItems]);
     setUploadDialogOpen(false);
     
-    // Simulate upload progress
     newUploads.forEach((upload) => {
       const intervalId = setInterval(() => {
         setUploadItems((prevUploads) => {
@@ -200,7 +196,7 @@ const FilesPage = () => {
               
               if (newProgress >= 100) {
                 clearInterval(intervalId);
-                return { ...item, progress: 100, status: 'success' };
+                return { ...item, progress: 100, status: 'success' as const };
               }
               
               return { ...item, progress: newProgress };
@@ -217,7 +213,6 @@ const FilesPage = () => {
   
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
-      // In a real app, you would create the folder and then refresh the file list
       console.log('Creating folder:', newFolderName);
       setNewFolderName('');
       setNewFolderDialogOpen(false);
@@ -233,11 +228,10 @@ const FilesPage = () => {
   const handleRetryUpload = (id: string) => {
     setUploadItems((prevUploads) => 
       prevUploads.map((item) => 
-        item.id === id ? { ...item, progress: 0, status: 'uploading', error: undefined } : item
+        item.id === id ? { ...item, progress: 0, status: 'uploading' as const, error: undefined } : item
       )
     );
     
-    // Simulate retry progress
     const intervalId = setInterval(() => {
       setUploadItems((prevUploads) => {
         const updatedUploads = prevUploads.map((item) => {
@@ -246,7 +240,7 @@ const FilesPage = () => {
             
             if (newProgress >= 100) {
               clearInterval(intervalId);
-              return { ...item, progress: 100, status: 'success' };
+              return { ...item, progress: 100, status: 'success' as const };
             }
             
             return { ...item, progress: newProgress };

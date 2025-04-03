@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StorageOverview } from '@/components/dashboard/StorageOverview';
@@ -15,7 +14,6 @@ import { PlusCircle, Upload, Clock, FileText, Upload as UploadIcon } from 'lucid
 const Dashboard = () => {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   
-  // Sample dashboard data
   const storageData = {
     totalSpace: 30 * 1024 * 1024 * 1024, // 30GB
     usedSpace: 20 * 1024 * 1024 * 1024, // 20GB
@@ -104,18 +102,16 @@ const Dashboard = () => {
   ];
   
   const handleFilesSelected = (files: File[]) => {
-    // Simulate file upload
     const newUploads: UploadItem[] = files.map((file, index) => ({
       id: `upload-${Date.now()}-${index}`,
       fileName: file.name,
       size: file.size,
       progress: 0,
-      status: 'uploading'
+      status: 'uploading' as const
     }));
     
     setUploadItems([...newUploads, ...uploadItems]);
     
-    // Simulate upload progress
     newUploads.forEach((upload) => {
       const intervalId = setInterval(() => {
         setUploadItems((prevUploads) => {
@@ -125,7 +121,7 @@ const Dashboard = () => {
               
               if (newProgress >= 100) {
                 clearInterval(intervalId);
-                return { ...item, progress: 100, status: 'success' };
+                return { ...item, progress: 100, status: 'success' as const };
               }
               
               return { ...item, progress: newProgress };
@@ -149,11 +145,10 @@ const Dashboard = () => {
   const handleRetryUpload = (id: string) => {
     setUploadItems((prevUploads) => 
       prevUploads.map((item) => 
-        item.id === id ? { ...item, progress: 0, status: 'uploading', error: undefined } : item
+        item.id === id ? { ...item, progress: 0, status: 'uploading' as const, error: undefined } : item
       )
     );
     
-    // Simulate retry progress
     const intervalId = setInterval(() => {
       setUploadItems((prevUploads) => {
         const updatedUploads = prevUploads.map((item) => {
@@ -162,7 +157,7 @@ const Dashboard = () => {
             
             if (newProgress >= 100) {
               clearInterval(intervalId);
-              return { ...item, progress: 100, status: 'success' };
+              return { ...item, progress: 100, status: 'success' as const };
             }
             
             return { ...item, progress: newProgress };

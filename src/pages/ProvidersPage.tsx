@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ProviderCard, ProviderInfo } from '@/components/providers/ProviderCard';
@@ -17,7 +16,8 @@ import {
   DialogContent, 
   DialogDescription, 
   DialogHeader, 
-  DialogTitle 
+  DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog';
 import { 
   Select, 
@@ -65,8 +65,6 @@ const ProvidersPage = () => {
   const connectProvider = () => {
     console.log('Connecting provider:', selectedProviderType);
     
-    // In a real app, this would trigger OAuth flow
-    // For demo purposes, we'll simulate adding a new provider
     if (selectedProviderType) {
       const newProvider: ProviderInfo = {
         id: `new-${Date.now()}`,
@@ -89,7 +87,6 @@ const ProvidersPage = () => {
   };
   
   const handleConnect = (provider: ProviderInfo) => {
-    // For demo purposes
     console.log('Connecting to provider:', provider.name);
     
     setProviders(
@@ -102,7 +99,6 @@ const ProvidersPage = () => {
   };
   
   const handleDisconnect = (provider: ProviderInfo) => {
-    // For demo purposes
     console.log('Disconnecting provider:', provider.name);
     
     setProviders(
@@ -125,7 +121,6 @@ const ProvidersPage = () => {
       newProviders[currentIndex] = { ...newProviders[currentIndex], priority: targetPriority };
       newProviders[currentIndex - 1] = { ...newProviders[currentIndex - 1], priority: currentPriority };
       
-      // Sort providers by priority
       newProviders.sort((a, b) => (a.priority || 0) - (b.priority || 0));
       
       setProviders(newProviders);
@@ -137,14 +132,12 @@ const ProvidersPage = () => {
       newProviders[currentIndex] = { ...newProviders[currentIndex], priority: targetPriority };
       newProviders[currentIndex + 1] = { ...newProviders[currentIndex + 1], priority: currentPriority };
       
-      // Sort providers by priority
       newProviders.sort((a, b) => (a.priority || 0) - (b.priority || 0));
       
       setProviders(newProviders);
     }
   };
   
-  // Calculate the total storage across all providers
   const totalAllocatedSpace = providers.reduce((total, provider) => 
     total + (provider.totalSpace || 0), 0
   );

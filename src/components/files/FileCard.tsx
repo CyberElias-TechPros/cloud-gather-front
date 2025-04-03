@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   FileIcon, 
@@ -6,8 +5,8 @@ import {
   FileImage, 
   FileVideo, 
   FileMusic, 
-  FileArchive, 
-  FilePdf, 
+  Archive as FileArchive, 
+  File as FilePdf, 
   Folder,
   MoreVertical 
 } from 'lucide-react';
