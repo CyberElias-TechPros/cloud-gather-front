@@ -7,9 +7,28 @@ interface FileGridProps {
   view: 'grid' | 'list';
   onFileOpen?: (file: FileItem) => void;
   onFileSelect?: (file: FileItem) => void;
+  onFileDownload?: (file: FileItem) => void;
+  onFileShare?: (file: FileItem) => void;
+  onFileRename?: (file: FileItem) => void;
+  onFileDelete?: (file: FileItem) => void;
+  onFileCopy?: (file: FileItem) => void;
+  onFileMove?: (file: FileItem) => void;
+  onFileDetails?: (file: FileItem) => void;
 }
 
-export const FileGrid = ({ files, view, onFileOpen, onFileSelect }: FileGridProps) => {
+export const FileGrid = ({
+  files,
+  view,
+  onFileOpen,
+  onFileSelect,
+  onFileDownload,
+  onFileShare,
+  onFileRename,
+  onFileDelete,
+  onFileCopy,
+  onFileMove,
+  onFileDetails
+}: FileGridProps) => {
   if (files.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-10 text-center">
@@ -48,6 +67,13 @@ export const FileGrid = ({ files, view, onFileOpen, onFileSelect }: FileGridProp
             view={view}
             onOpen={onFileOpen}
             onSelect={onFileSelect}
+            onDownload={onFileDownload}
+            onShare={onFileShare}
+            onRename={onFileRename}
+            onDelete={onFileDelete}
+            onCopy={onFileCopy}
+            onMove={onFileMove}
+            onDetails={onFileDetails}
           />
         ))}
       </div>
@@ -69,6 +95,13 @@ export const FileGrid = ({ files, view, onFileOpen, onFileSelect }: FileGridProp
             view={view}
             onOpen={onFileOpen}
             onSelect={onFileSelect}
+            onDownload={onFileDownload}
+            onShare={onFileShare}
+            onRename={onFileRename}
+            onDelete={onFileDelete}
+            onCopy={onFileCopy}
+            onMove={onFileMove}
+            onDetails={onFileDetails}
           />
         ))}
       </div>

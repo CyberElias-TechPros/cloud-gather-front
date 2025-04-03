@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   FileIcon, 
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { FileContextMenu } from './FileContextMenu';
 
 export interface FileItem {
   id: string;
@@ -37,9 +39,28 @@ interface FileCardProps {
   view: 'grid' | 'list';
   onOpen?: (file: FileItem) => void;
   onSelect?: (file: FileItem) => void;
+  onDownload?: (file: FileItem) => void;
+  onShare?: (file: FileItem) => void;
+  onRename?: (file: FileItem) => void;
+  onDelete?: (file: FileItem) => void;
+  onCopy?: (file: FileItem) => void;
+  onMove?: (file: FileItem) => void;
+  onDetails?: (file: FileItem) => void;
 }
 
-export const FileCard = ({ file, view, onOpen, onSelect }: FileCardProps) => {
+export const FileCard = ({ 
+  file, 
+  view, 
+  onOpen, 
+  onSelect,
+  onDownload,
+  onShare,
+  onRename,
+  onDelete,
+  onCopy,
+  onMove,
+  onDetails
+}: FileCardProps) => {
   const getFileIcon = () => {
     if (file.isFolder) return <Folder />;
     
@@ -84,85 +105,119 @@ export const FileCard = ({ file, view, onOpen, onSelect }: FileCardProps) => {
   
   if (view === 'grid') {
     return (
-      <Card className="group cloud-card flex flex-col overflow-hidden">
-        <div className="relative pt-4 px-4 pb-2 flex items-center justify-center h-32">
-          <div className={cn("w-16 h-16 flex items-center justify-center rounded-lg", getFileTypeColor())}>
-            {getFileIcon()}
+      <FileContextMenu 
+        file={file}
+        onOpen={onOpen}
+        onDownload={onDownload}
+        onShare={onShare}
+        onRename={onRename}
+        onDelete={onDelete}
+        onCopy={onCopy}
+        onMove={onMove}
+        onDetails={onDetails}
+      >
+        <Card className="group cloud-card flex flex-col overflow-hidden cursor-pointer">
+          <div className="relative pt-4 px-4 pb-2 flex items-center justify-center h-32" onClick={handleSelect}>
+            <div className={cn("w-16 h-16 flex items-center justify-center rounded-lg", getFileTypeColor())}>
+              {getFileIcon()}
+            </div>
+            
+            <div className="absolute top-2 right-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onDownload?.(file)}>Download</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onShare?.(file)}>Share</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onRename?.(file)}>Rename</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => onDelete?.(file)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           
-          <div className="absolute top-2 right-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
-                <DropdownMenuItem>Download</DropdownMenuItem>
-                <DropdownMenuItem>Share</DropdownMenuItem>
-                <DropdownMenuItem>Rename</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="p-3 border-t border-border">
+            <div className="font-medium truncate" title={file.name}>
+              {file.name}
+            </div>
+            <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
+              <span>{!file.isFolder ? formatFileSize(file.size) : '—'}</span>
+              <span>{formatDistanceToNow(file.modified, { addSuffix: true })}</span>
+            </div>
           </div>
-        </div>
-        
-        <div className="p-3 border-t border-border">
-          <div className="font-medium truncate" title={file.name}>
-            {file.name}
-          </div>
-          <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
-            <span>{!file.isFolder ? formatFileSize(file.size) : '—'}</span>
-            <span>{formatDistanceToNow(file.modified, { addSuffix: true })}</span>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </FileContextMenu>
     );
   }
   
   return (
-    <div 
-      className="group flex items-center px-4 py-3 hover:bg-muted/50 rounded-md"
-      onClick={handleSelect}
+    <FileContextMenu 
+      file={file}
+      onOpen={onOpen}
+      onDownload={onDownload}
+      onShare={onShare}
+      onRename={onRename}
+      onDelete={onDelete}
+      onCopy={onCopy}
+      onMove={onMove}
+      onDetails={onDetails}
     >
-      <div className={cn("w-10 h-10 flex items-center justify-center rounded-lg mr-3", getFileTypeColor())}>
-        {getFileIcon()}
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate" title={file.name}>
-          {file.name}
+      <div 
+        className="group flex items-center px-4 py-3 hover:bg-muted/50 rounded-md cursor-pointer"
+        onClick={handleSelect}
+      >
+        <div className={cn("w-10 h-10 flex items-center justify-center rounded-lg mr-3", getFileTypeColor())}>
+          {getFileIcon()}
         </div>
-        <div className="text-xs text-muted-foreground">
-          {!file.isFolder ? formatFileSize(file.size) : 'Folder'} • {formatDistanceToNow(file.modified, { addSuffix: true })}
+        
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate" title={file.name}>
+            {file.name}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {!file.isFolder ? formatFileSize(file.size) : 'Folder'} • {formatDistanceToNow(file.modified, { addSuffix: true })}
+          </div>
+        </div>
+        
+        {file.provider && (
+          <div className="hidden md:block text-xs text-muted-foreground px-2">
+            {file.provider}
+          </div>
+        )}
+        
+        <div className="ml-2 flex-shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDownload?.(file)}>Download</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onShare?.(file)}>Share</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRename?.(file)}>Rename</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => onDelete?.(file)}
+                className="text-destructive focus:text-destructive"
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-      
-      {file.provider && (
-        <div className="hidden md:block text-xs text-muted-foreground px-2">
-          {file.provider}
-        </div>
-      )}
-      
-      <div className="ml-2 flex-shrink-0">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
-            <DropdownMenuItem>Download</DropdownMenuItem>
-            <DropdownMenuItem>Share</DropdownMenuItem>
-            <DropdownMenuItem>Rename</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+    </FileContextMenu>
   );
 };

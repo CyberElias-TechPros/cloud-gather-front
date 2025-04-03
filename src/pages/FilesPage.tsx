@@ -1,55 +1,39 @@
+
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileGrid } from '@/components/files/FileGrid';
 import { FileItem } from '@/components/files/FileCard';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger
-} from '@/components/ui/dialog';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
-import { 
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { 
-  ChevronDown, 
-  Filter, 
-  FolderPlus, 
-  Grid, 
-  List, 
-  Plus, 
-  Search, 
-  SlidersHorizontal, 
-  SortAsc, 
-  Upload 
-} from 'lucide-react';
-import { UploadDropzone } from '@/components/uploads/UploadDropzone';
 import { UploadProgress, UploadItem } from '@/components/uploads/UploadProgress';
+import { FileOperationsDrawer } from '@/components/files/FileOperationsDrawer';
+import { FileToolbar } from '@/components/files/FileToolbar';
+import { FileBreadcrumb } from '@/components/files/FileBreadcrumb';
+import { DeleteFileDialog } from '@/components/files/DeleteFileDialog';
+import { toast } from '@/hooks/use-toast';
 
 const FilesPage = () => {
+  // View state
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [currentPath, setCurrentPath] = useState<string[]>(['My Files']);
+  
+  // Dialog states
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
-  const [currentPath, setCurrentPath] = useState<string[]>(['My Files']);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  // Search and sort states
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
-  const [newFolderName, setNewFolderName] = useState('');
   
+  // Form states
+  const [newFolderName, setNewFolderName] = useState('');
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
+  
+  // Active file operation states
+  const [activeFile, setActiveFile] = useState<FileItem | null>(null);
+  const [activeOperation, setActiveOperation] = useState<'rename' | 'share' | 'details' | null>(null);
+  
+  // Sample files data
   const files: FileItem[] = [
     {
       id: '1',
@@ -133,6 +117,7 @@ const FilesPage = () => {
     }
   ];
   
+  // Filtered and sorted files
   const filteredFiles = files.filter(file => 
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -154,11 +139,16 @@ const FilesPage = () => {
     return 0;
   });
   
+  // Navigation handlers
   const handleFileOpen = (file: FileItem) => {
     if (file.isFolder) {
       setCurrentPath([...currentPath, file.name]);
     } else {
       console.log('Opening file:', file.name);
+      toast({
+        title: 'Opening file',
+        description: `Opening ${file.name}`,
+      });
     }
   };
   
@@ -166,6 +156,7 @@ const FilesPage = () => {
     setCurrentPath(currentPath.slice(0, index + 1));
   };
   
+  // Sort handler
   const handleSort = (newSortBy: 'name' | 'date' | 'size') => {
     if (sortBy === newSortBy) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -175,6 +166,7 @@ const FilesPage = () => {
     }
   };
   
+  // File upload handlers
   const handleFilesSelected = (files: File[]) => {
     const newUploads: UploadItem[] = files.map((file, index) => ({
       id: `upload-${Date.now()}-${index}`,
@@ -187,6 +179,7 @@ const FilesPage = () => {
     setUploadItems([...newUploads, ...uploadItems]);
     setUploadDialogOpen(false);
     
+    // Simulate upload progress
     newUploads.forEach((upload) => {
       const intervalId = setInterval(() => {
         setUploadItems((prevUploads) => {
@@ -211,14 +204,6 @@ const FilesPage = () => {
     });
   };
   
-  const handleCreateFolder = () => {
-    if (newFolderName.trim()) {
-      console.log('Creating folder:', newFolderName);
-      setNewFolderName('');
-      setNewFolderDialogOpen(false);
-    }
-  };
-  
   const handleCancelUpload = (id: string) => {
     setUploadItems((prevUploads) => 
       prevUploads.filter((item) => item.id !== id)
@@ -232,6 +217,7 @@ const FilesPage = () => {
       )
     );
     
+    // Simulate upload progress
     const intervalId = setInterval(() => {
       setUploadItems((prevUploads) => {
         const updatedUploads = prevUploads.map((item) => {
@@ -259,124 +245,119 @@ const FilesPage = () => {
       prevUploads.filter((item) => item.id !== id)
     );
   };
+  
+  const handleCreateFolder = () => {
+    if (newFolderName.trim()) {
+      console.log('Creating folder:', newFolderName);
+      toast({
+        title: 'Folder created',
+        description: `Folder "${newFolderName}" created successfully`,
+      });
+      setNewFolderName('');
+      setNewFolderDialogOpen(false);
+    }
+  };
+
+  // File operation handlers
+  const handleFileDownload = (file: FileItem) => {
+    toast({
+      title: 'Downloading file',
+      description: `Downloading ${file.name}`,
+    });
+  };
+
+  const handleFileShare = (file: FileItem) => {
+    setActiveFile(file);
+    setActiveOperation('share');
+  };
+
+  const handleFileRename = (file: FileItem) => {
+    setActiveFile(file);
+    setActiveOperation('rename');
+  };
+
+  const handleFileDelete = (file: FileItem) => {
+    setActiveFile(file);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleFileCopy = (file: FileItem) => {
+    toast({
+      title: 'Copy file',
+      description: `Copying ${file.name} to clipboard`,
+    });
+  };
+
+  const handleFileMove = (file: FileItem) => {
+    toast({
+      title: 'Move file',
+      description: `Please select a destination for ${file.name}`,
+    });
+  };
+
+  const handleFileDetails = (file: FileItem) => {
+    setActiveFile(file);
+    setActiveOperation('details');
+  };
+
+  const handleConfirmDelete = () => {
+    if (activeFile) {
+      toast({
+        title: 'File deleted',
+        description: `${activeFile.name} has been deleted`,
+      });
+      setActiveFile(null);
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleConfirmRename = (file: FileItem, newName: string) => {
+    toast({
+      title: 'File renamed',
+      description: `Renamed to ${newName}`,
+    });
+  };
+
+  const handleConfirmShare = (file: FileItem, shareSettings: any) => {
+    toast({
+      title: 'Share settings updated',
+      description: `Share settings for ${file.name} updated`,
+    });
+  };
+
+  const closeOperationDrawer = () => {
+    setActiveOperation(null);
+    setActiveFile(null);
+  };
 
   return (
     <AppLayout title="My Files">
-      <div className="mb-6">
-        <Breadcrumb>
-          {currentPath.map((path, index) => (
-            <React.Fragment key={path}>
-              {index > 0 && <BreadcrumbSeparator />}
-              <BreadcrumbItem>
-                <BreadcrumbLink
-                  onClick={() => handleNavigatePath(index)}
-                  className="cursor-pointer"
-                >
-                  {path}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-            </React.Fragment>
-          ))}
-        </Breadcrumb>
-      </div>
+      {/* Breadcrumb Navigation */}
+      <FileBreadcrumb 
+        currentPath={currentPath} 
+        onNavigate={handleNavigatePath}
+      />
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div className="w-full md:w-auto flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search files and folders..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Button variant="outline" size="sm" onClick={() => setView(view === 'grid' ? 'list' : 'grid')}>
-            {view === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <SortAsc className="h-4 w-4 mr-2" />
-                Sort
-                <ChevronDown className="h-4 w-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleSort('name')}>
-                By Name {sortBy === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort('date')}>
-                By Date {sortBy === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort('size')}>
-                By Size {sortBy === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-                <ChevronDown className="h-4 w-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem>All Files</DropdownMenuItem>
-              <DropdownMenuItem>Documents</DropdownMenuItem>
-              <DropdownMenuItem>Images</DropdownMenuItem>
-              <DropdownMenuItem>Videos</DropdownMenuItem>
-              <DropdownMenuItem>Audio</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Upload className="h-4 w-4 mr-2" />
-                Upload
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Upload Files</DialogTitle>
-              </DialogHeader>
-              <UploadDropzone onFilesSelected={handleFilesSelected} />
-            </DialogContent>
-          </Dialog>
-          
-          <Dialog open={newFolderDialogOpen} onOpenChange={setNewFolderDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <FolderPlus className="h-4 w-4 mr-2" />
-                New Folder
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Folder</DialogTitle>
-              </DialogHeader>
-              <Input
-                placeholder="Folder name"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                className="my-4"
-              />
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setNewFolderDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateFolder}>Create</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+      {/* File Toolbar */}
+      <FileToolbar 
+        view={view}
+        onViewChange={setView}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        uploadDialogOpen={uploadDialogOpen}
+        setUploadDialogOpen={setUploadDialogOpen}
+        newFolderDialogOpen={newFolderDialogOpen}
+        setNewFolderDialogOpen={setNewFolderDialogOpen}
+        newFolderName={newFolderName}
+        setNewFolderName={setNewFolderName}
+        onCreateFolder={handleCreateFolder}
+        onFilesSelected={handleFilesSelected}
+      />
       
+      {/* Upload Progress */}
       <UploadProgress 
         uploads={uploadItems}
         onCancel={handleCancelUpload}
@@ -384,10 +365,35 @@ const FilesPage = () => {
         onClear={handleClearUpload}
       />
       
+      {/* File Grid */}
       <FileGrid 
         files={sortedFiles} 
         view={view} 
         onFileOpen={handleFileOpen}
+        onFileDownload={handleFileDownload}
+        onFileShare={handleFileShare}
+        onFileRename={handleFileRename}
+        onFileDelete={handleFileDelete}
+        onFileCopy={handleFileCopy}
+        onFileMove={handleFileMove}
+        onFileDetails={handleFileDetails}
+      />
+
+      {/* File Operations UI */}
+      <FileOperationsDrawer
+        file={activeFile}
+        operation={activeOperation}
+        onClose={closeOperationDrawer}
+        onRename={handleConfirmRename}
+        onShare={handleConfirmShare}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteFileDialog
+        file={activeFile}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
       />
     </AppLayout>
   );

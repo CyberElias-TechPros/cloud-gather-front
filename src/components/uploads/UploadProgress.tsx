@@ -1,16 +1,22 @@
+
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { FileIcon, X, Check, AlertCircle } from 'lucide-react';
+import { FileIcon, X, Check, AlertCircle, Split, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface UploadItem {
   id: string;
   fileName: string;
   size: number;
   progress: number;
-  status: 'uploading' | 'success' | 'error';
+  status: 'uploading' | 'success' | 'error' | 'splitting';
+  splitInfo?: {
+    parts: number;
+    providers: string[];
+  };
   error?: string;
 }
 
@@ -55,6 +61,21 @@ export const UploadProgress = ({ uploads, onCancel, onRetry, onClear }: UploadPr
                 <div className="flex justify-between text-sm">
                   <span className="font-medium truncate" title={upload.fileName}>
                     {upload.fileName}
+                    {upload.status === 'splitting' && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center ml-2 text-amber-500">
+                              <Split className="h-3 w-3 mr-1" />
+                              <span className="text-xs">Split file</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>This file is being split across {upload.splitInfo?.parts || 0} parts on {upload.splitInfo?.providers.join(', ')}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </span>
                   <span className="text-muted-foreground ml-2">
                     {formatFileSize(upload.size)}
@@ -65,7 +86,8 @@ export const UploadProgress = ({ uploads, onCancel, onRetry, onClear }: UploadPr
                   <Progress 
                     value={upload.progress} 
                     className={cn("h-1.5 flex-1", 
-                      upload.status === 'error' ? 'bg-red-100' : 'bg-muted'
+                      upload.status === 'error' ? 'bg-red-100' : 
+                      upload.status === 'splitting' ? 'bg-amber-100' : 'bg-muted'
                     )} 
                   />
                   
@@ -74,6 +96,8 @@ export const UploadProgress = ({ uploads, onCancel, onRetry, onClear }: UploadPr
                       <Check className="h-4 w-4 text-green-500" />
                     ) : upload.status === 'error' ? (
                       <AlertCircle className="h-4 w-4 text-red-500" />
+                    ) : upload.status === 'splitting' ? (
+                      <Info className="h-4 w-4 text-amber-500" />
                     ) : (
                       `${upload.progress}%`
                     )}
@@ -83,6 +107,12 @@ export const UploadProgress = ({ uploads, onCancel, onRetry, onClear }: UploadPr
                 {upload.error && (
                   <div className="text-xs text-red-500 mt-1">
                     {upload.error}
+                  </div>
+                )}
+                
+                {upload.status === 'splitting' && upload.splitInfo && (
+                  <div className="text-xs text-amber-600 mt-1">
+                    Splitting across {upload.splitInfo.providers.length} providers
                   </div>
                 )}
               </div>
