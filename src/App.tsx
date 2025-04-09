@@ -1,62 +1,57 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import Index from "./pages/Index";
-import FilesPage from "./pages/FilesPage";
-import SharedPage from "./pages/SharedPage";
-import StarredPage from "./pages/StarredPage";
-import RecentsPage from "./pages/RecentsPage";
-import TeamPage from "./pages/TeamPage";
-import ProfilePage from "./pages/ProfilePage";
-import ProvidersPage from "./pages/ProvidersPage";
-import StoragePage from "./pages/StoragePage";
-import SettingsPage from "./pages/SettingsPage";
-import AuthPage from "./pages/AuthPage";
-import NotFound from "./pages/NotFound";
-import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { Toaster } from 'sonner';
 
-const queryClient = new QueryClient();
+// Public pages
+import LandingPage from './pages/LandingPage';
+import AuthPage from './pages/Auth';
+import AboutPage from './pages/AboutPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
+import ContactPage from './pages/ContactPage';
+import SharePage from './pages/SharePage';
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/auth" element={<AuthPage />} />
+// Protected pages
+import Dashboard from './pages/Index';
+import FilesPage from './pages/FilesPage';
+import ProvidersPage from './pages/ProvidersPage';
+import SettingsPage from './pages/SettingsPage';
+import ApiPage from './pages/ApiPage';
 
-            {/* Protected Routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/shared" element={<SharedPage />} />
-              <Route path="/starred" element={<StarredPage />} />
-              <Route path="/recents" element={<RecentsPage />} />
-              <Route path="/team" element={<TeamPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/providers" element={<ProvidersPage />} />
-              <Route path="/storage" element={<StoragePage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Route>
-
-            {/* Redirect legacy routes */}
-            <Route path="/login" element={<Navigate to="/auth" replace />} />
-            <Route path="/signup" element={<Navigate to="/auth" replace />} />
-
-            {/* 404 Route */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Toaster position="top-right" />
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/share/:fileId" element={<SharePage />} />
+          
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/files" element={<FilesPage />} />
+            <Route path="/files/:folderId" element={<FilesPage />} />
+            <Route path="/providers" element={<ProvidersPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/api" element={<ApiPage />} />
+          </Route>
+          
+          {/* Fallback Route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
 
 export default App;

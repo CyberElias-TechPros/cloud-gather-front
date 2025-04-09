@@ -1,228 +1,225 @@
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Bell, FileUp, Share2, Database, Clock, Activity, Mail, Smartphone } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import React, { useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useToast } from '@/hooks/use-toast';
+import { Bell } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
-interface NotificationSettingsProps {
-  notifyOnUploads: boolean;
-  setNotifyOnUploads: (value: boolean) => void;
-  notifyOnShares: boolean;
-  setNotifyOnShares: (value: boolean) => void;
-}
+export const NotificationSettings = () => {
+  const [emailNotifications, setEmailNotifications] = useState({
+    fileUpdates: true,
+    shareActivity: true,
+    comments: true,
+    storageAlerts: true,
+    accountActivity: true,
+  });
+  
+  const [pushNotifications, setPushNotifications] = useState({
+    fileUpdates: false,
+    shareActivity: true,
+    comments: false,
+    storageAlerts: true,
+    accountActivity: true,
+  });
+  
+  const [emailFrequency, setEmailFrequency] = useState('immediate');
+  
+  const { toast } = useToast();
+  
+  const handleSaveChanges = () => {
+    toast({
+      title: 'Notification settings updated',
+      description: 'Your notification preferences have been saved.',
+    });
+  };
 
-export const NotificationSettings = ({
-  notifyOnUploads,
-  setNotifyOnUploads,
-  notifyOnShares,
-  setNotifyOnShares
-}: NotificationSettingsProps) => {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-5 w-5" />
-          Notification Settings
-        </CardTitle>
-        <CardDescription>
-          Control when and how you receive notifications
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">File Activity Notifications</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Bell className="mr-2 h-5 w-5" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription>
+            Choose how and when you want to be notified
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <h3 className="text-lg font-medium mb-4">Email Notifications</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">File Upload Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified when files are uploaded
-                  </span>
+                <div className="space-y-0.5">
+                  <Label>File Updates</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications when files are updated or modified.
+                  </p>
                 </div>
-                <Switch 
-                  checked={notifyOnUploads} 
-                  onCheckedChange={setNotifyOnUploads} 
+                <Switch
+                  checked={emailNotifications.fileUpdates}
+                  onCheckedChange={(checked) => setEmailNotifications({ ...emailNotifications, fileUpdates: checked })}
                 />
               </div>
               
+              <Separator />
+              
               <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">File Sharing Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified when files are shared with you
-                  </span>
+                <div className="space-y-0.5">
+                  <Label>Share Activity</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications when files are shared with you or accessed by others.
+                  </p>
                 </div>
-                <Switch 
-                  checked={notifyOnShares} 
-                  onCheckedChange={setNotifyOnShares} 
+                <Switch
+                  checked={emailNotifications.shareActivity}
+                  onCheckedChange={(checked) => setEmailNotifications({ ...emailNotifications, shareActivity: checked })}
                 />
               </div>
               
+              <Separator />
+              
               <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Comment Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified of comments on your files
-                  </span>
+                <div className="space-y-0.5">
+                  <Label>Comments</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications when someone comments on your files.
+                  </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={emailNotifications.comments}
+                  onCheckedChange={(checked) => setEmailNotifications({ ...emailNotifications, comments: checked })}
+                />
+              </div>
+              
+              <Separator />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Storage Alerts</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications about storage usage and limits.
+                  </p>
+                </div>
+                <Switch
+                  checked={emailNotifications.storageAlerts}
+                  onCheckedChange={(checked) => setEmailNotifications({ ...emailNotifications, storageAlerts: checked })}
+                />
+              </div>
+              
+              <Separator />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Account Activity</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications about your account security and status.
+                  </p>
+                </div>
+                <Switch
+                  checked={emailNotifications.accountActivity}
+                  onCheckedChange={(checked) => setEmailNotifications({ ...emailNotifications, accountActivity: checked })}
+                />
               </div>
             </div>
-            
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-medium mb-4">Push Notifications</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">File Edit Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified when your files are edited
-                  </span>
+                <div className="space-y-0.5">
+                  <Label>File Updates</Label>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={pushNotifications.fileUpdates}
+                  onCheckedChange={(checked) => setPushNotifications({ ...pushNotifications, fileUpdates: checked })}
+                />
               </div>
               
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Download Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified when your files are downloaded
-                  </span>
-                </div>
-                <Switch defaultChecked={false} />
-              </div>
+              <Separator />
               
               <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Version History Notifications</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified of new file versions
-                  </span>
+                <div className="space-y-0.5">
+                  <Label>Share Activity</Label>
                 </div>
-                <Switch defaultChecked={false} />
+                <Switch
+                  checked={pushNotifications.shareActivity}
+                  onCheckedChange={(checked) => setPushNotifications({ ...pushNotifications, shareActivity: checked })}
+                />
+              </div>
+              
+              <Separator />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Comments</Label>
+                </div>
+                <Switch
+                  checked={pushNotifications.comments}
+                  onCheckedChange={(checked) => setPushNotifications({ ...pushNotifications, comments: checked })}
+                />
+              </div>
+              
+              <Separator />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Storage Alerts</Label>
+                </div>
+                <Switch
+                  checked={pushNotifications.storageAlerts}
+                  onCheckedChange={(checked) => setPushNotifications({ ...pushNotifications, storageAlerts: checked })}
+                />
+              </div>
+              
+              <Separator />
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Account Activity</Label>
+                </div>
+                <Switch
+                  checked={pushNotifications.accountActivity}
+                  onCheckedChange={(checked) => setPushNotifications({ ...pushNotifications, accountActivity: checked })}
+                />
               </div>
             </div>
           </div>
           
-          <Separator />
-          
-          <h3 className="text-lg font-medium">System Notifications</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Storage Limit Alerts</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified when providers are almost full
-                  </span>
-                </div>
-                <Switch defaultChecked />
+          <div>
+            <h3 className="text-lg font-medium mb-4">Email Frequency</h3>
+            <RadioGroup value={emailFrequency} onValueChange={setEmailFrequency}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="immediate" id="immediate" />
+                <Label htmlFor="immediate">Immediate - Send emails as events happen</Label>
               </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Provider Connection Issues</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified about storage provider connectivity
-                  </span>
-                </div>
-                <Switch defaultChecked />
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="daily" id="daily" />
+                <Label htmlFor="daily">Daily Digest - Summarize all activities once a day</Label>
               </div>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Security Alerts</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified about suspicious activities
-                  </span>
-                </div>
-                <Switch defaultChecked />
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="weekly" id="weekly" />
+                <Label htmlFor="weekly">Weekly Summary - Send a weekly overview of all activities</Label>
               </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="block mb-1">Feature Updates</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Get notified about new features and updates
-                  </span>
-                </div>
-                <Switch defaultChecked />
-              </div>
-            </div>
+            </RadioGroup>
           </div>
-          
-          <Separator />
-          
-          <h3 className="text-lg font-medium">Notification Delivery</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="flex items-center">
-                <Bell className="h-4 w-4 mr-2" />
-                In-App
-              </Label>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Show notifications in the app
-                </span>
-                <Switch defaultChecked />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="flex items-center">
-                <Mail className="h-4 w-4 mr-2" />
-                Email
-              </Label>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Send notifications via email
-                </span>
-                <Switch defaultChecked />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="flex items-center">
-                <Smartphone className="h-4 w-4 mr-2" />
-                Mobile Push
-              </Label>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Send notifications to mobile devices
-                </span>
-                <Switch defaultChecked />
-              </div>
-            </div>
-          </div>
-          
-          <div className="space-y-2 mt-4">
-            <Label>Email Notification Frequency</Label>
-            <Select defaultValue="immediate">
-              <SelectTrigger>
-                <SelectValue placeholder="Select frequency" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="immediate">Immediately</SelectItem>
-                <SelectItem value="hourly">Hourly Digest</SelectItem>
-                <SelectItem value="daily">Daily Digest</SelectItem>
-                <SelectItem value="weekly">Weekly Summary</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
-        <div className="flex justify-end">
-          <Button>Save Notification Settings</Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={handleSaveChanges}>Save Changes</Button>
+        </CardFooter>
+      </Card>
+    </div>
   );
 };

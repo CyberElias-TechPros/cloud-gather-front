@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { FileItem } from './FileCard';
+import { FileItem } from '@/types/file';
 
 interface DeleteFileDialogProps {
   file: FileItem | null;

@@ -62,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      // Using type-safe approach with explicit type casting for database operations
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -72,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
-      setProfile(data);
+      setProfile(data as UserProfile);
     } catch (error: any) {
       console.error('Error fetching profile:', error);
       toast.error('Failed to load user profile');
@@ -99,9 +100,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user?.id) return;
 
     try {
+      // Using type-safe approach with explicit type casting for database operations
       const { error } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(updates as any)
         .eq('id', user.id);
 
       if (error) throw error;

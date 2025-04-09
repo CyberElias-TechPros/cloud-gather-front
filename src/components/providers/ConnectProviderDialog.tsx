@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,13 +13,20 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-type Provider = 'google-drive' | 'dropbox' | 'onedrive';
+type Provider = 'google-drive' | 'dropbox' | 'onedrive' | 'box' | 'amazon-s3' | 'backblaze' | 'mega' | 'pcloud' | 'yandex-disk' | 'icedrive' | 'sync';
 
 interface ConnectProviderDialogProps {
   open: boolean;
   onClose: () => void;
   provider: Provider;
   onSuccess: () => void;
+}
+
+// Define the oauth callback handler on the window object
+declare global {
+  interface Window {
+    handleOAuthCallback: (code: string) => Promise<void>;
+  }
 }
 
 export const ConnectProviderDialog = ({
@@ -30,6 +37,62 @@ export const ConnectProviderDialog = ({
 }: ConnectProviderDialogProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Set up the global callback function
+    window.handleOAuthCallback = async (code: string) => {
+      if (!code) {
+        toast({
+          title: 'Authentication failed',
+          description: 'Could not connect to the provider',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        
+        if (!session.session) {
+          toast({
+            title: 'Authentication required',
+            description: 'Please sign in to connect a storage provider',
+            variant: 'destructive',
+          });
+          return;
+        }
+        
+        // Exchange code for tokens and save the provider
+        const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
+          body: { 
+            code,
+            session: session.session.access_token
+          },
+        });
+        
+        if (error) throw error;
+        
+        toast({
+          title: 'Connection successful',
+          description: `Connected to ${formatProviderName(provider)}`,
+        });
+        
+        onSuccess();
+      } catch (error: any) {
+        console.error('Error connecting provider:', error);
+        toast({
+          title: 'Connection failed',
+          description: error.message || 'Could not complete the connection',
+          variant: 'destructive',
+        });
+      }
+    };
+    
+    return () => {
+      // Clean up the global function when the component unmounts
+      delete window.handleOAuthCallback;
+    };
+  }, [provider, toast, onSuccess]);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -55,45 +118,9 @@ export const ConnectProviderDialog = ({
       // Open the provider's OAuth page
       const authWindow = window.open(data.url, '_blank', 'width=800,height=600');
       
-      // Function to handle OAuth callback
-      window.handleOAuthCallback = async (code: string) => {
-        if (!code) {
-          toast({
-            title: 'Authentication failed',
-            description: 'Could not connect to the provider',
-            variant: 'destructive',
-          });
-          return;
-        }
-        
-        try {
-          // Exchange code for tokens and save the provider
-          const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
-            body: { 
-              code,
-              session: session.session.access_token
-            },
-          });
-          
-          if (error) throw error;
-          
-          toast({
-            title: 'Connection successful',
-            description: `Connected to ${formatProviderName(provider)}`,
-          });
-          
-          onSuccess();
-        } catch (error) {
-          console.error('Error connecting provider:', error);
-          toast({
-            title: 'Connection failed',
-            description: error.message || 'Could not complete the connection',
-            variant: 'destructive',
-          });
-        }
-      };
+      // The callback is handled by the useEffect above
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error initiating OAuth flow:', error);
       toast({
         title: 'Connection failed',
@@ -114,6 +141,22 @@ export const ConnectProviderDialog = ({
         return 'Dropbox';
       case 'onedrive':
         return 'OneDrive';
+      case 'box':
+        return 'Box';
+      case 'amazon-s3':
+        return 'Amazon S3';
+      case 'backblaze':
+        return 'Backblaze';
+      case 'mega':
+        return 'MEGA';
+      case 'pcloud':
+        return 'pCloud';
+      case 'yandex-disk':
+        return 'Yandex Disk';
+      case 'icedrive':
+        return 'Icedrive';
+      case 'sync':
+        return 'Sync.com';
       default:
         return 'Provider';
     }
@@ -134,6 +177,10 @@ export const ConnectProviderDialog = ({
             src={`/images/${provider}-logo.png`} 
             alt={`${formatProviderName(provider)} logo`} 
             className="h-16 w-16 mb-4" 
+            onError={(e) => {
+              // Fallback to a generic logo if the image doesn't exist
+              e.currentTarget.src = '/images/cloud-logo.png';
+            }}
           />
           <p className="text-center mb-4">
             You'll be redirected to {formatProviderName(provider)} to authorize access to your files.

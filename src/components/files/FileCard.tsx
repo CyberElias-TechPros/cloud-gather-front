@@ -1,38 +1,24 @@
 
 import React from 'react';
-import { 
-  FileIcon, 
-  FileText, 
-  FileImage, 
-  FileVideo, 
-  FileMusic, 
-  Archive as FileArchive, 
-  File as FilePdf, 
-  Folder,
-  MoreVertical 
-} from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { Card } from '@/components/ui/card';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { FileContextMenu } from './FileContextMenu';
-
-export interface FileItem {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  modified: Date;
-  isFolder?: boolean;
-  provider?: string;
-}
+import {
+  File,
+  FileText,
+  Image,
+  Music,
+  Video,
+  Folder,
+  MoreVertical,
+  Download,
+  Share2,
+  Star,
+  Trash2
+} from 'lucide-react';
+import { FileItem } from '@/types/file';
+import { formatDistanceToNow } from 'date-fns';
+import { formatBytes } from '@/lib/utils';
 
 interface FileCardProps {
   file: FileItem;
@@ -48,10 +34,10 @@ interface FileCardProps {
   onDetails?: (file: FileItem) => void;
 }
 
-export const FileCard = ({ 
-  file, 
-  view, 
-  onOpen, 
+export const FileCard = ({
+  file,
+  view,
+  onOpen,
   onSelect,
   onDownload,
   onShare,
@@ -59,53 +45,53 @@ export const FileCard = ({
   onDelete,
   onCopy,
   onMove,
-  onDetails
+  onDetails,
 }: FileCardProps) => {
   const getFileIcon = () => {
-    if (file.isFolder) return <Folder />;
-    
-    if (file.type.startsWith('image/')) return <FileImage />;
-    if (file.type.startsWith('video/')) return <FileVideo />;
-    if (file.type.startsWith('audio/')) return <FileMusic />;
-    if (file.type === 'application/pdf') return <FilePdf />;
-    if (file.type.includes('zip') || file.type.includes('compressed')) return <FileArchive />;
-    if (file.type.includes('text')) return <FileText />;
-    
-    return <FileIcon />;
+    if (file.is_folder) {
+      return <Folder className="h-6 w-6 text-blue-500" />;
+    }
+
+    const mime = file.mime_type?.toLowerCase() || '';
+
+    if (mime.startsWith('image/')) {
+      return <Image className="h-6 w-6 text-green-500" />;
+    } else if (mime.startsWith('video/')) {
+      return <Video className="h-6 w-6 text-purple-500" />;
+    } else if (mime.startsWith('audio/')) {
+      return <Music className="h-6 w-6 text-yellow-500" />;
+    } else if (mime.startsWith('text/') || mime.includes('document') || mime.includes('pdf')) {
+      return <FileText className="h-6 w-6 text-red-500" />;
+    } else {
+      return <File className="h-6 w-6 text-gray-500" />;
+    }
+  };
+
+  const getFileSize = () => {
+    if (file.is_folder) {
+      return '';
+    }
+    return formatBytes(file.size);
   };
   
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const getModifiedDate = () => {
+    try {
+      return formatDistanceToNow(new Date(file.updated_at), { addSuffix: true });
+    } catch (error) {
+      return 'Unknown date';
+    }
   };
-  
-  const getFileTypeColor = () => {
-    if (file.isFolder) return 'bg-blue-100 text-blue-700';
-    
-    if (file.type.startsWith('image/')) return 'bg-pink-100 text-pink-700';
-    if (file.type.startsWith('video/')) return 'bg-purple-100 text-purple-700';
-    if (file.type.startsWith('audio/')) return 'bg-indigo-100 text-indigo-700';
-    if (file.type === 'application/pdf') return 'bg-red-100 text-red-700';
-    if (file.type.includes('zip') || file.type.includes('compressed')) return 'bg-yellow-100 text-yellow-700';
-    if (file.type.includes('text')) return 'bg-green-100 text-green-700';
-    
-    return 'bg-gray-100 text-gray-700';
+
+  const handleFileClick = () => {
+    if (onOpen) {
+      onOpen(file);
+    }
   };
-  
-  const handleOpen = () => {
-    if (onOpen) onOpen(file);
-  };
-  
-  const handleSelect = () => {
-    if (onSelect) onSelect(file);
-  };
-  
+
+  // Grid view
   if (view === 'grid') {
     return (
-      <FileContextMenu 
+      <FileContextMenu
         file={file}
         onOpen={onOpen}
         onDownload={onDownload}
@@ -116,52 +102,58 @@ export const FileCard = ({
         onMove={onMove}
         onDetails={onDetails}
       >
-        <Card className="group cloud-card flex flex-col overflow-hidden cursor-pointer">
-          <div className="relative pt-4 px-4 pb-2 flex items-center justify-center h-32" onClick={handleSelect}>
-            <div className={cn("w-16 h-16 flex items-center justify-center rounded-lg", getFileTypeColor())}>
-              {getFileIcon()}
+        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+          <CardContent className="p-4">
+            <div className="flex flex-col items-center" onClick={handleFileClick}>
+              <div className="bg-muted rounded-md p-4 mb-3">
+                {getFileIcon()}
+              </div>
+              <div className="text-center">
+                <div className="font-medium text-sm truncate max-w-[120px]" title={file.filename}>
+                  {file.filename}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  {getFileSize()}
+                </div>
+              </div>
             </div>
-            
-            <div className="absolute top-2 right-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onDownload?.(file)}>Download</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onShare?.(file)}>Share</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onRename?.(file)}>Rename</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => onDelete?.(file)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            <div className="mt-2 flex justify-around">
+              {!file.is_folder && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-7 w-7 p-0"
+                  onClick={(e) => { e.stopPropagation(); onDownload?.(file); }}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 w-7 p-0"
+                onClick={(e) => { e.stopPropagation(); onShare?.(file); }}
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 w-7 p-0"
+                onClick={(e) => { e.stopPropagation(); onDelete?.(file); }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-          
-          <div className="p-3 border-t border-border">
-            <div className="font-medium truncate" title={file.name}>
-              {file.name}
-            </div>
-            <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
-              <span>{!file.isFolder ? formatFileSize(file.size) : '—'}</span>
-              <span>{formatDistanceToNow(file.modified, { addSuffix: true })}</span>
-            </div>
-          </div>
+          </CardContent>
         </Card>
       </FileContextMenu>
     );
   }
-  
+
+  // List view
   return (
-    <FileContextMenu 
+    <FileContextMenu
       file={file}
       onOpen={onOpen}
       onDownload={onDownload}
@@ -173,49 +165,34 @@ export const FileCard = ({
       onDetails={onDetails}
     >
       <div 
-        className="group flex items-center px-4 py-3 hover:bg-muted/50 rounded-md cursor-pointer"
-        onClick={handleSelect}
+        className="flex items-center px-4 py-3 hover:bg-muted/50 cursor-pointer"
+        onClick={handleFileClick}
       >
-        <div className={cn("w-10 h-10 flex items-center justify-center rounded-lg mr-3", getFileTypeColor())}>
-          {getFileIcon()}
+        <div className="flex flex-1 items-center">
+          <div className="mr-2">
+            {getFileIcon()}
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium truncate" title={file.filename}>
+              {file.filename}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {getModifiedDate()} • {getFileSize()}
+            </div>
+          </div>
         </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="font-medium truncate" title={file.name}>
-            {file.name}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {!file.isFolder ? formatFileSize(file.size) : 'Folder'} • {formatDistanceToNow(file.modified, { addSuffix: true })}
-          </div>
+        <div className="w-1/5 hidden md:block text-sm text-muted-foreground">
+          {file.provider_id ? 'External' : 'Local'}
         </div>
-        
-        {file.provider && (
-          <div className="hidden md:block text-xs text-muted-foreground px-2">
-            {file.provider}
-          </div>
-        )}
-        
-        <div className="ml-2 flex-shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDownload?.(file)}>Download</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onShare?.(file)}>Share</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRename?.(file)}>Rename</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={() => onDelete?.(file)}
-                className="text-destructive focus:text-destructive"
-              >
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={(e) => { e.stopPropagation(); }}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </FileContextMenu>
