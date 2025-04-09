@@ -13,6 +13,11 @@ import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import ContactPage from './pages/ContactPage';
 import SharePage from './pages/SharePage';
+import BlogPage from './pages/BlogPage';
+import FeaturesPage from './pages/FeaturesPage';
+import PricingPage from './pages/PricingPage';
+import ApiDocPage from './pages/ApiDocPage';
+import DevelopersPage from './pages/DevelopersPage';
 
 // Protected pages
 import Dashboard from './pages/Index';
@@ -20,6 +25,12 @@ import FilesPage from './pages/FilesPage';
 import ProvidersPage from './pages/ProvidersPage';
 import SettingsPage from './pages/SettingsPage';
 import ApiPage from './pages/ApiPage';
+import ProfilePage from './pages/ProfilePage';
+import StoragePage from './pages/StoragePage';
+import SharedPage from './pages/SharedPage';
+import StarredPage from './pages/StarredPage';
+import RecentsPage from './pages/RecentsPage';
+import TeamPage from './pages/TeamPage';
 
 function App() {
   return (
@@ -35,6 +46,11 @@ function App() {
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/share/:fileId" element={<SharePage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/api-docs" element={<ApiDocPage />} />
+          <Route path="/developers" element={<DevelopersPage />} />
           
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
@@ -44,6 +60,12 @@ function App() {
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/api" element={<ApiPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/storage" element={<StoragePage />} />
+            <Route path="/shared" element={<SharedPage />} />
+            <Route path="/starred" element={<StarredPage />} />
+            <Route path="/recents" element={<RecentsPage />} />
+            <Route path="/team" element={<TeamPage />} />
           </Route>
           
           {/* Fallback Route */}

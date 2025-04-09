@@ -10,18 +10,22 @@ import { NotificationSettings } from '@/components/settings/NotificationSettings
 import { FileSharingSettings } from '@/components/settings/FileSharingSettings';
 import { DisplaySettings } from '@/components/settings/DisplaySettings';
 import { APISettings } from '@/components/settings/APISettings';
+import { AdvancedStorageSettings } from '@/components/settings/AdvancedStorageSettings';
+import { UploadPreferences } from '@/components/settings/UploadPreferences';
 
 const SettingsPage = () => {
   return (
     <AppLayout title="Settings">
       <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 mb-4">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 mb-4">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="sharing">File Sharing</TabsTrigger>
           <TabsTrigger value="display">Display</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
+          <TabsTrigger value="upload">Upload</TabsTrigger>
         </TabsList>
         
         <TabsContent value="account" className="mt-0">
@@ -46,6 +50,14 @@ const SettingsPage = () => {
         
         <TabsContent value="api" className="mt-0">
           <APISettings />
+        </TabsContent>
+        
+        <TabsContent value="storage" className="mt-0">
+          <AdvancedStorageSettings />
+        </TabsContent>
+        
+        <TabsContent value="upload" className="mt-0">
+          <UploadPreferences />
         </TabsContent>
       </Tabs>
     </AppLayout>

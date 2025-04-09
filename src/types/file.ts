@@ -59,3 +59,47 @@ export interface UploadItem {
   error?: string;
   fileType?: string;
 }
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  permissions: string[];
+  status: 'active' | 'expired' | 'revoked';
+}
+
+export interface WebhookConfig {
+  id: string;
+  name: string;
+  event_types: ('file.created' | 'file.updated' | 'file.deleted' | 'file.shared')[];
+  url: string;
+  secret: string;
+  created_at: string;
+  status: 'active' | 'inactive';
+  last_triggered_at: string | null;
+}
+
+export interface StorageUsage {
+  total: number;
+  used: number;
+  providers: {
+    id: string;
+    name: string;
+    total: number;
+    used: number;
+    type: string;
+  }[];
+}
+
+export interface FileAccessStats {
+  id: string;
+  file_id: string;
+  accessed_at: string;
+  accessed_by: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  access_type: 'view' | 'download' | 'edit' | 'print';
+}

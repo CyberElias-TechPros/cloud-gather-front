@@ -59,14 +59,17 @@ const ContactPage = () => {
             >
               <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
             </svg>
-            <Link to="/" className="text-xl font-bold">CloudUnity</Link>
+            <Link to="/" className="text-xl font-bold">Cloud Edifix</Link>
           </div>
           
           <div className="hidden md:flex space-x-8">
             <Link to="/" className="text-muted-foreground hover:text-foreground">Home</Link>
+            <Link to="/features" className="text-muted-foreground hover:text-foreground">Features</Link>
+            <Link to="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
             <Link to="/about" className="text-muted-foreground hover:text-foreground">About</Link>
             <Link to="/contact" className="text-foreground font-medium">Contact</Link>
             <Link to="/blog" className="text-muted-foreground hover:text-foreground">Blog</Link>
+            <Link to="/api-docs" className="text-muted-foreground hover:text-foreground">API</Link>
           </div>
           
           <div className="flex space-x-4">
@@ -86,7 +89,7 @@ const ContactPage = () => {
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">Get In Touch</h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Have questions about CloudUnity? Want to learn more about our service? 
+              Have questions about Cloud Edifix? Want to learn more about our service? 
               We'd love to hear from you.
             </p>
           </div>
@@ -103,8 +106,8 @@ const ContactPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <a href="mailto:support@cloudunity.io" className="text-primary hover:underline">
-                  support@cloudunity.io
+                <a href="mailto:support@cloudedifix.io" className="text-primary hover:underline">
+                  support@cloudedifix.io
                 </a>
               </CardContent>
             </Card>
@@ -246,7 +249,7 @@ const ContactPage = () => {
                 >
                   <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
                 </svg>
-                <span className="text-xl font-bold">CloudUnity</span>
+                <span className="text-xl font-bold">Cloud Edifix</span>
               </div>
               <p className="text-muted-foreground">
                 Unify your cloud storage experience across all providers.
@@ -256,10 +259,10 @@ const ContactPage = () => {
             <div>
               <h3 className="font-bold mb-4">Product</h3>
               <ul className="space-y-2">
-                <li><Link to="/#features" className="text-muted-foreground hover:text-foreground">Features</Link></li>
-                <li><Link to="/#providers" className="text-muted-foreground hover:text-foreground">Providers</Link></li>
-                <li><Link to="/#pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link></li>
-                <li><Link to="/#faq" className="text-muted-foreground hover:text-foreground">FAQ</Link></li>
+                <li><Link to="/features" className="text-muted-foreground hover:text-foreground">Features</Link></li>
+                <li><Link to="/providers" className="text-muted-foreground hover:text-foreground">Providers</Link></li>
+                <li><Link to="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link></li>
+                <li><Link to="/api-docs" className="text-muted-foreground hover:text-foreground">API</Link></li>
               </ul>
             </div>
             
@@ -268,7 +271,7 @@ const ContactPage = () => {
               <ul className="space-y-2">
                 <li><Link to="/about" className="text-muted-foreground hover:text-foreground">About</Link></li>
                 <li><Link to="/blog" className="text-muted-foreground hover:text-foreground">Blog</Link></li>
-                <li><Link to="/careers" className="text-muted-foreground hover:text-foreground">Careers</Link></li>
+                <li><Link to="/developers" className="text-muted-foreground hover:text-foreground">Developers</Link></li>
                 <li><Link to="/contact" className="text-muted-foreground hover:text-foreground">Contact</Link></li>
               </ul>
             </div>
@@ -284,7 +287,7 @@ const ContactPage = () => {
           </div>
           
           <div className="border-t mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-muted-foreground">© 2023 CloudUnity. All rights reserved.</p>
+            <p className="text-muted-foreground">© 2023 Cloud Edifix. All rights reserved.</p>
           </div>
         </div>
       </footer>

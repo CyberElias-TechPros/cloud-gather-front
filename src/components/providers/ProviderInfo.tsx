@@ -117,8 +117,8 @@ export const ProviderIntegrationGuide: React.FC = () => {
               <ol className="list-decimal pl-5 space-y-2">
                 <li>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-primary hover:underline">Google Cloud Console</a></li>
                 <li>Create a new project or select an existing one</li>
-                <li>Navigate to "APIs & Services" > "Library" and enable the Google Drive API</li>
-                <li>Go to "APIs & Services" > "Credentials" and create an OAuth client ID</li>
+                <li>Navigate to "APIs & Services" {">"} "Library" and enable the Google Drive API</li>
+                <li>Go to "APIs & Services" {">"} "Credentials" and create an OAuth client ID</li>
                 <li>Select "Web application" as the application type</li>
                 <li>Add authorized JavaScript origins (your app's domain)</li>
                 <li>Add authorized redirect URIs (your app's callback URL: https://your-domain.com/auth/callback/google-drive)</li>
@@ -215,6 +215,45 @@ export const ProviderIntegrationGuide: React.FC = () => {
                     <li>AWS_SECRET_ACCESS_KEY</li>
                     <li>AWS_S3_BUCKET</li>
                     <li>AWS_REGION</li>
+                  </ul>
+                </li>
+              </ol>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="mega">
+            <AccordionTrigger>MEGA Setup Guide</AccordionTrigger>
+            <AccordionContent>
+              <ol className="list-decimal pl-5 space-y-2">
+                <li>Go to the <a href="https://mega.nz/developers" target="_blank" rel="noreferrer" className="text-primary hover:underline">MEGA Developer Portal</a></li>
+                <li>Create a developer account if you don't have one</li>
+                <li>Register a new application to get API access</li>
+                <li>Set your application's redirect URI</li>
+                <li>Copy your Application Key and Application Secret</li>
+                <li>Add these credentials to your Supabase Edge Function environment variables:
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>MEGA_CLIENT_ID</li>
+                    <li>MEGA_CLIENT_SECRET</li>
+                    <li>MEGA_REDIRECT_URI</li>
+                  </ul>
+                </li>
+              </ol>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="pcloud">
+            <AccordionTrigger>pCloud Setup Guide</AccordionTrigger>
+            <AccordionContent>
+              <ol className="list-decimal pl-5 space-y-2">
+                <li>Visit the <a href="https://docs.pcloud.com/my_apps/" target="_blank" rel="noreferrer" className="text-primary hover:underline">pCloud Developer Portal</a></li>
+                <li>Create a developer account and register a new application</li>
+                <li>Set your application's redirect URI and required permissions</li>
+                <li>After approval, you will receive your Client ID and Client Secret</li>
+                <li>Add these credentials to your Supabase Edge Function environment variables:
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>PCLOUD_CLIENT_ID</li>
+                    <li>PCLOUD_CLIENT_SECRET</li>
+                    <li>PCLOUD_REDIRECT_URI</li>
                   </ul>
                 </li>
               </ol>
