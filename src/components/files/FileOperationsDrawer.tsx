@@ -1,27 +1,20 @@
 
 import React, { useState } from 'react';
-import { FileItem } from './FileCard';
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ChevronDown, Calendar, Shield, Users, LinkIcon, User, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FileItem } from './FileCard';
+import { formatDistanceToNow } from 'date-fns';
+import { Check, Share2, FileText, Pencil } from 'lucide-react';
 
 interface FileOperationsDrawerProps {
   file: FileItem | null;
   operation: 'rename' | 'share' | 'details' | null;
   onClose: () => void;
   onRename?: (file: FileItem, newName: string) => void;
-  onShare?: (file: FileItem, shareSettings: any) => void;
+  onShare?: (file: FileItem, shareSettings: { email: string; permission: 'view' | 'edit' | 'admin' }) => void;
 }
 
 export const FileOperationsDrawer = ({
@@ -32,33 +25,28 @@ export const FileOperationsDrawer = ({
   onShare,
 }: FileOperationsDrawerProps) => {
   const [newName, setNewName] = useState('');
-  const [shareType, setShareType] = useState<'public' | 'restricted' | 'private'>('restricted');
-  const [expirationDate, setExpirationDate] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
+  const [shareEmail, setShareEmail] = useState('');
+  const [sharePermission, setSharePermission] = useState<'view' | 'edit' | 'admin'>('view');
 
   React.useEffect(() => {
     if (file && operation === 'rename') {
-      setNewName(file.name);
+      setNewName(file.filename);
     }
   }, [file, operation]);
 
   const handleRename = () => {
-    if (file && newName.trim() && onRename) {
-      onRename(file, newName.trim());
-      onClose();
+    if (file && newName && onRename) {
+      onRename(file, newName);
     }
   };
 
   const handleShare = () => {
-    if (file && onShare) {
-      onShare(file, {
-        shareType,
-        expirationDate: expirationDate ? new Date(expirationDate) : null,
-        password: password.trim() || null,
-      });
-      onClose();
+    if (file && shareEmail && onShare) {
+      onShare(file, { email: shareEmail, permission: sharePermission });
     }
   };
+
+  if (!file) return null;
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -68,161 +56,155 @@ export const FileOperationsDrawer = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  if (!file || !operation) return null;
+  const renderContent = () => {
+    switch (operation) {
+      case 'rename':
+        return (
+          <>
+            <DrawerHeader>
+              <DrawerTitle className="flex items-center">
+                <Pencil className="h-5 w-5 mr-2" />
+                Rename {file.is_folder ? 'Folder' : 'File'}
+              </DrawerTitle>
+            </DrawerHeader>
+            <div className="px-4">
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-name">New Name</Label>
+                  <Input
+                    id="new-name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Enter new name"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </div>
+            <DrawerFooter>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button onClick={handleRename} disabled={!newName || newName === file.filename}>
+                  <Check className="h-4 w-4 mr-2" />
+                  Rename
+                </Button>
+              </div>
+            </DrawerFooter>
+          </>
+        );
+
+      case 'share':
+        return (
+          <>
+            <DrawerHeader>
+              <DrawerTitle className="flex items-center">
+                <Share2 className="h-5 w-5 mr-2" />
+                Share {file.filename}
+              </DrawerTitle>
+            </DrawerHeader>
+            <div className="px-4">
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="share-email">Email Address</Label>
+                  <Input
+                    id="share-email"
+                    value={shareEmail}
+                    onChange={(e) => setShareEmail(e.target.value)}
+                    placeholder="recipient@example.com"
+                    type="email"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="share-permission">Permission</Label>
+                  <Select value={sharePermission} onValueChange={(value: any) => setSharePermission(value)}>
+                    <SelectTrigger id="share-permission">
+                      <SelectValue placeholder="Select permission" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="view">View only</SelectItem>
+                      <SelectItem value="edit">Can edit</SelectItem>
+                      <SelectItem value="admin">Full access</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DrawerFooter>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button onClick={handleShare} disabled={!shareEmail}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </Button>
+              </div>
+            </DrawerFooter>
+          </>
+        );
+
+      case 'details':
+        return (
+          <>
+            <DrawerHeader>
+              <DrawerTitle className="flex items-center">
+                <FileText className="h-5 w-5 mr-2" />
+                File Details
+              </DrawerTitle>
+            </DrawerHeader>
+            <div className="px-4">
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-y-2">
+                  <div className="text-sm font-medium">Name:</div>
+                  <div className="text-sm">{file.filename}</div>
+                  
+                  <div className="text-sm font-medium">Type:</div>
+                  <div className="text-sm">
+                    {file.is_folder ? 'Folder' : file.mime_type || 'Unknown'}
+                  </div>
+                  
+                  <div className="text-sm font-medium">Size:</div>
+                  <div className="text-sm">{file.is_folder ? '—' : formatFileSize(file.size)}</div>
+                  
+                  <div className="text-sm font-medium">Modified:</div>
+                  <div className="text-sm">
+                    {formatDistanceToNow(new Date(file.updated_at), { addSuffix: true })}
+                  </div>
+                  
+                  <div className="text-sm font-medium">Created:</div>
+                  <div className="text-sm">
+                    {formatDistanceToNow(new Date(file.created_at), { addSuffix: true })}
+                  </div>
+                  
+                  {file.provider_id && (
+                    <>
+                      <div className="text-sm font-medium">Provider:</div>
+                      <div className="text-sm">{file.provider || 'Local Storage'}</div>
+                    </>
+                  )}
+                  
+                  <div className="text-sm font-medium">Path:</div>
+                  <div className="text-sm truncate">{file.path}</div>
+                </div>
+              </div>
+            </div>
+            <DrawerFooter>
+              <Button onClick={onClose}>Close</Button>
+            </DrawerFooter>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
-    <Drawer open={!!operation} onOpenChange={onClose}>
-      <DrawerContent>
-        <div className="mx-auto w-full max-w-sm">
-          <DrawerHeader>
-            <DrawerTitle>
-              {operation === 'rename' ? 'Rename File' : 
-               operation === 'share' ? 'Share File' : 
-               'File Details'}
-            </DrawerTitle>
-            <DrawerDescription>
-              {operation === 'rename' ? 'Enter a new name for your file' : 
-               operation === 'share' ? 'Configure sharing settings' : 
-               file.name}
-            </DrawerDescription>
-          </DrawerHeader>
-
-          {operation === 'rename' && (
-            <div className="p-4 pb-0">
-              <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-            </div>
-          )}
-
-          {operation === 'share' && (
-            <div className="p-4 pb-0 space-y-4">
-              <div className="space-y-2">
-                <Label>Access level</Label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start">
-                      {shareType === 'public' ? (
-                        <>
-                          <Users className="mr-2 h-4 w-4" />
-                          <span>Public - Anyone with the link</span>
-                        </>
-                      ) : shareType === 'restricted' ? (
-                        <>
-                          <User className="mr-2 h-4 w-4" />
-                          <span>Restricted - Specific people</span>
-                        </>
-                      ) : (
-                        <>
-                          <Shield className="mr-2 h-4 w-4" />
-                          <span>Private - Only you</span>
-                        </>
-                      )}
-                      <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[200px]">
-                    <DropdownMenuItem onClick={() => setShareType('public')}>
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>Public</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShareType('restricted')}>
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Restricted</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShareType('private')}>
-                      <Shield className="mr-2 h-4 w-4" />
-                      <span>Private</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="expiration">Expiration</Label>
-                <div className="flex gap-2">
-                  <Clock className="h-4 w-4 mt-3" />
-                  <Input
-                    id="expiration"
-                    type="date"
-                    value={expirationDate}
-                    onChange={(e) => setExpirationDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              </div>
-
-              {shareType !== 'private' && (
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password (optional)</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Add a password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {operation === 'details' && (
-            <div className="px-4 py-2 space-y-4">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">Name</div>
-                <div className="font-medium">{file.name}</div>
-                
-                <div className="text-muted-foreground">Type</div>
-                <div className="font-medium">{file.isFolder ? 'Folder' : file.type}</div>
-                
-                <div className="text-muted-foreground">Size</div>
-                <div className="font-medium">{file.isFolder ? '—' : formatFileSize(file.size)}</div>
-                
-                <div className="text-muted-foreground">Modified</div>
-                <div className="font-medium">{file.modified.toLocaleString()}</div>
-                
-                <div className="text-muted-foreground">Provider</div>
-                <div className="font-medium">{file.provider || 'Multiple'}</div>
-              </div>
-            </div>
-          )}
-
-          <DrawerFooter>
-            {operation === 'rename' && (
-              <Button onClick={handleRename}>Rename</Button>
-            )}
-            {operation === 'share' && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                  <input 
-                    className="w-full bg-transparent border-none text-sm p-0 focus:outline-none" 
-                    readOnly 
-                    value="https://cloudunity.com/s/abcd1234" 
-                  />
-                  <Button variant="ghost" size="sm" onClick={() => {}}>
-                    Copy
-                  </Button>
-                </div>
-                <Button onClick={handleShare}>Save & Share</Button>
-              </div>
-            )}
-            {operation === 'details' && (
-              <Button variant="secondary" onClick={onClose}>Close</Button>
-            )}
-            <DrawerClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </div>
-      </DrawerContent>
+    <Drawer open={!!operation} onOpenChange={(open) => !open && onClose()}>
+      <DrawerContent>{renderContent()}</DrawerContent>
     </Drawer>
   );
 };

@@ -1,16 +1,16 @@
 
 import React from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { FileItem } from './FileCard';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter,
-  DialogDescription
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle } from 'lucide-react';
 
 interface DeleteFileDialogProps {
   file: FileItem | null;
@@ -23,32 +23,28 @@ export const DeleteFileDialog = ({
   file,
   open,
   onOpenChange,
-  onConfirm
+  onConfirm,
 }: DeleteFileDialogProps) => {
+  if (!file) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete File</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete "{file?.name}"? This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center p-4 bg-amber-50 rounded-md border border-amber-200 text-amber-700">
-          <AlertTriangle className="h-5 w-5 mr-2 text-amber-500" />
-          <div className="text-sm">
-            This file will be permanently deleted from all connected storage providers.
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={onConfirm}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {file.filename}</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete {file.is_folder ? 'this folder' : 'this file'}?
+            {file.is_folder && ' All files and folders within this folder will also be deleted.'}
+            This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
             Delete
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };

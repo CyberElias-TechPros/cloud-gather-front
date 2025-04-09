@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileGrid } from '@/components/files/FileGrid';
 import { FileItem } from '@/components/files/FileCard';
@@ -8,12 +8,30 @@ import { FileOperationsDrawer } from '@/components/files/FileOperationsDrawer';
 import { FileToolbar } from '@/components/files/FileToolbar';
 import { FileBreadcrumb } from '@/components/files/FileBreadcrumb';
 import { DeleteFileDialog } from '@/components/files/DeleteFileDialog';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import { 
+  getFiles, 
+  createFolder, 
+  uploadFile, 
+  deleteFile,
+  renameFile,
+  shareFile,
+  starFile
+} from '@/services/cloudProviders';
+import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const FilesPage = () => {
+  const { user } = useAuth();
+  
   // View state
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [currentPath, setCurrentPath] = useState<string[]>(['My Files']);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  
+  // Data state
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Dialog states
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -33,127 +51,75 @@ const FilesPage = () => {
   const [activeFile, setActiveFile] = useState<FileItem | null>(null);
   const [activeOperation, setActiveOperation] = useState<'rename' | 'share' | 'details' | null>(null);
   
-  // Sample files data
-  const files: FileItem[] = [
-    {
-      id: '1',
-      name: 'Documents',
-      type: 'folder',
-      size: 0,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-      isFolder: true
-    },
-    {
-      id: '2',
-      name: 'Images',
-      type: 'folder',
-      size: 0,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-      isFolder: true
-    },
-    {
-      id: '3',
-      name: 'Project Files',
-      type: 'folder',
-      size: 0,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-      isFolder: true
-    },
-    {
-      id: '4',
-      name: 'Annual Report 2023.pdf',
-      type: 'application/pdf',
-      size: 3.5 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
-      provider: 'Google Drive'
-    },
-    {
-      id: '5',
-      name: 'Product Presentation.pptx',
-      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      size: 5.2 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-      provider: 'OneDrive'
-    },
-    {
-      id: '6',
-      name: 'Budget Plan.xlsx',
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      size: 1.8 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-      provider: 'Dropbox'
-    },
-    {
-      id: '7',
-      name: 'Team Photo.jpg',
-      type: 'image/jpeg',
-      size: 2.7 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 10), // 10 hours ago
-      provider: 'Google Drive'
-    },
-    {
-      id: '8',
-      name: 'Project Roadmap.pdf',
-      type: 'application/pdf',
-      size: 1.2 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 6), // 6 hours ago
-      provider: 'OneDrive'
-    },
-    {
-      id: '9',
-      name: 'Company Logo.png',
-      type: 'image/png',
-      size: 850 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-      provider: 'Dropbox'
-    },
-    {
-      id: '10',
-      name: 'Product Demo.mp4',
-      type: 'video/mp4',
-      size: 15.7 * 1024 * 1024,
-      modified: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
-      provider: 'Google Drive'
-    }
-  ];
-  
-  // Filtered and sorted files
-  const filteredFiles = files.filter(file => 
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  
-  const sortedFiles = [...filteredFiles].sort((a, b) => {
-    if (sortBy === 'name') {
-      return sortDirection === 'asc' 
-        ? a.name.localeCompare(b.name) 
-        : b.name.localeCompare(a.name);
-    } else if (sortBy === 'date') {
-      return sortDirection === 'asc' 
-        ? a.modified.getTime() - b.modified.getTime() 
-        : b.modified.getTime() - a.modified.getTime();
-    } else if (sortBy === 'size') {
-      return sortDirection === 'asc' 
-        ? a.size - b.size 
-        : b.size - a.size;
-    }
-    return 0;
-  });
+  // Fetch files when folder changes
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadFiles = async () => {
+      setLoading(true);
+      try {
+        const filesData = await getFiles(currentFolderId, sortBy, sortDirection);
+        setFiles(filesData);
+      } catch (error) {
+        console.error('Error loading files:', error);
+        toast.error('Failed to load files');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadFiles();
+  }, [currentFolderId, sortBy, sortDirection, user]);
   
   // Navigation handlers
-  const handleFileOpen = (file: FileItem) => {
-    if (file.isFolder) {
-      setCurrentPath([...currentPath, file.name]);
+  const handleFileOpen = async (file: FileItem) => {
+    if (file.is_folder) {
+      setCurrentPath([...currentPath, file.filename]);
+      setCurrentFolderId(file.id);
     } else {
-      console.log('Opening file:', file.name);
-      toast({
-        title: 'Opening file',
-        description: `Opening ${file.name}`,
-      });
+      // If it's stored in Supabase Storage
+      if (file.provider_file_id && !file.provider_id) {
+        try {
+          // Download from Supabase Storage
+          const { data, error } = await supabase
+            .storage
+            .from('user_uploads')
+            .download(file.provider_file_id);
+            
+          if (error) throw error;
+          
+          // Create a download link
+          const url = URL.createObjectURL(data);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.filename;
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          toast.success('File downloaded successfully');
+        } catch (error) {
+          console.error('Error downloading file:', error);
+          toast.error('Failed to download file');
+        }
+      } else {
+        toast.info('Opening file from cloud storage provider');
+        // In a real implementation, this would open the file from the provider
+      }
     }
   };
   
   const handleNavigatePath = (index: number) => {
     setCurrentPath(currentPath.slice(0, index + 1));
+    
+    if (index === 0) {
+      // Root level
+      setCurrentFolderId(null);
+    } else {
+      // We would need to have a mapping of path segments to folder IDs
+      // This is simplified for the demo - in real implementation would need path traversal
+    }
   };
   
   // Sort handler
@@ -167,8 +133,8 @@ const FilesPage = () => {
   };
   
   // File upload handlers
-  const handleFilesSelected = (files: File[]) => {
-    const newUploads: UploadItem[] = files.map((file, index) => ({
+  const handleFilesSelected = async (selectedFiles: File[]) => {
+    const newUploads: UploadItem[] = selectedFiles.map((file, index) => ({
       id: `upload-${Date.now()}-${index}`,
       fileName: file.name,
       size: file.size,
@@ -179,53 +145,94 @@ const FilesPage = () => {
     setUploadItems([...newUploads, ...uploadItems]);
     setUploadDialogOpen(false);
     
-    // Simulate upload progress
-    newUploads.forEach((upload) => {
-      const intervalId = setInterval(() => {
+    // Process each file
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      const uploadItem = newUploads[i];
+      
+      // Simulate progress
+      const progressInterval = setInterval(() => {
         setUploadItems((prevUploads) => {
-          const updatedUploads = prevUploads.map((item) => {
-            if (item.id === upload.id) {
-              const newProgress = item.progress + 10;
-              
-              if (newProgress >= 100) {
-                clearInterval(intervalId);
-                return { ...item, progress: 100, status: 'success' as const };
-              }
-              
+          return prevUploads.map((item) => {
+            if (item.id === uploadItem.id) {
+              const newProgress = Math.min(95, item.progress + 5); // Cap at 95% until really done
               return { ...item, progress: newProgress };
             }
-            
             return item;
           });
-          
-          return updatedUploads;
         });
-      }, 500);
-    });
+      }, 200);
+      
+      try {
+        // Upload the file
+        const uploadedFile = await uploadFile(file, currentFolderId);
+        
+        // Add to files list
+        setFiles((prevFiles) => [...prevFiles, uploadedFile]);
+        
+        // Update upload status
+        setUploadItems((prevUploads) => {
+          return prevUploads.map((item) => {
+            if (item.id === uploadItem.id) {
+              return { ...item, progress: 100, status: 'success' as const };
+            }
+            return item;
+          });
+        });
+        
+        toast.success(`${file.name} uploaded successfully`);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        
+        // Update upload status to error
+        setUploadItems((prevUploads) => {
+          return prevUploads.map((item) => {
+            if (item.id === uploadItem.id) {
+              return {
+                ...item, 
+                status: 'error' as const, 
+                error: error.message || 'Upload failed'
+              };
+            }
+            return item;
+          });
+        });
+        
+        toast.error(`Failed to upload ${file.name}`);
+      } finally {
+        clearInterval(progressInterval);
+      }
+    }
   };
   
   const handleCancelUpload = (id: string) => {
+    // In a real implementation, would need to abort the fetch/xhr
     setUploadItems((prevUploads) => 
       prevUploads.filter((item) => item.id !== id)
     );
   };
   
   const handleRetryUpload = (id: string) => {
+    // Find the upload item
+    const uploadItem = uploadItems.find((item) => item.id === id);
+    if (!uploadItem) return;
+    
     setUploadItems((prevUploads) => 
       prevUploads.map((item) => 
         item.id === id ? { ...item, progress: 0, status: 'uploading' as const, error: undefined } : item
       )
     );
     
-    // Simulate upload progress
-    const intervalId = setInterval(() => {
+    // In a real implementation, we would need to re-upload the file
+    // For this demo, we'll just simulate progress
+    const progressInterval = setInterval(() => {
       setUploadItems((prevUploads) => {
         const updatedUploads = prevUploads.map((item) => {
           if (item.id === id) {
             const newProgress = item.progress + 10;
             
             if (newProgress >= 100) {
-              clearInterval(intervalId);
+              clearInterval(progressInterval);
               return { ...item, progress: 100, status: 'success' as const };
             }
             
@@ -246,24 +253,25 @@ const FilesPage = () => {
     );
   };
   
-  const handleCreateFolder = () => {
+  const handleCreateFolder = async () => {
     if (newFolderName.trim()) {
-      console.log('Creating folder:', newFolderName);
-      toast({
-        title: 'Folder created',
-        description: `Folder "${newFolderName}" created successfully`,
-      });
-      setNewFolderName('');
-      setNewFolderDialogOpen(false);
+      try {
+        const folder = await createFolder(newFolderName, currentFolderId);
+        setFiles((prevFiles) => [...prevFiles, folder]);
+        setNewFolderName('');
+        setNewFolderDialogOpen(false);
+        toast.success(`Folder "${newFolderName}" created successfully`);
+      } catch (error) {
+        console.error('Error creating folder:', error);
+        toast.error('Failed to create folder');
+      }
     }
   };
 
   // File operation handlers
   const handleFileDownload = (file: FileItem) => {
-    toast({
-      title: 'Downloading file',
-      description: `Downloading ${file.name}`,
-    });
+    // Similar to handleFileOpen for files
+    toast.info(`Downloading ${file.filename}`);
   };
 
   const handleFileShare = (file: FileItem) => {
@@ -282,17 +290,11 @@ const FilesPage = () => {
   };
 
   const handleFileCopy = (file: FileItem) => {
-    toast({
-      title: 'Copy file',
-      description: `Copying ${file.name} to clipboard`,
-    });
+    toast.info(`Copying ${file.filename} to clipboard`);
   };
 
   const handleFileMove = (file: FileItem) => {
-    toast({
-      title: 'Move file',
-      description: `Please select a destination for ${file.name}`,
-    });
+    toast.info(`Please select a destination for ${file.filename}`);
   };
 
   const handleFileDetails = (file: FileItem) => {
@@ -300,35 +302,64 @@ const FilesPage = () => {
     setActiveOperation('details');
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (activeFile) {
-      toast({
-        title: 'File deleted',
-        description: `${activeFile.name} has been deleted`,
-      });
-      setActiveFile(null);
-      setDeleteDialogOpen(false);
+      try {
+        await deleteFile(activeFile.id);
+        setFiles((prevFiles) => prevFiles.filter(file => file.id !== activeFile.id));
+        toast.success(`${activeFile.filename} has been deleted`);
+      } catch (error) {
+        console.error('Error deleting file:', error);
+        toast.error('Failed to delete file');
+      } finally {
+        setActiveFile(null);
+        setDeleteDialogOpen(false);
+      }
     }
   };
 
-  const handleConfirmRename = (file: FileItem, newName: string) => {
-    toast({
-      title: 'File renamed',
-      description: `Renamed to ${newName}`,
-    });
+  const handleConfirmRename = async (file: FileItem, newName: string) => {
+    try {
+      await renameFile(file.id, newName);
+      // Update the file in the list
+      setFiles((prevFiles) => prevFiles.map(f => {
+        if (f.id === file.id) {
+          return { ...f, filename: newName };
+        }
+        return f;
+      }));
+      toast.success('File renamed successfully');
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      toast.error('Failed to rename file');
+    } finally {
+      setActiveOperation(null);
+      setActiveFile(null);
+    }
   };
 
-  const handleConfirmShare = (file: FileItem, shareSettings: any) => {
-    toast({
-      title: 'Share settings updated',
-      description: `Share settings for ${file.name} updated`,
-    });
+  const handleConfirmShare = async (file: FileItem, shareSettings: { email: string, permission: 'view' | 'edit' | 'admin' }) => {
+    try {
+      await shareFile(file.id, shareSettings.email, shareSettings.permission);
+      toast.success('File shared successfully');
+    } catch (error) {
+      console.error('Error sharing file:', error);
+      toast.error('Failed to share file');
+    } finally {
+      setActiveOperation(null);
+      setActiveFile(null);
+    }
   };
 
   const closeOperationDrawer = () => {
     setActiveOperation(null);
     setActiveFile(null);
   };
+
+  // Filter files based on search
+  const filteredFiles = searchQuery.trim() ? 
+    files.filter(file => file.filename.toLowerCase().includes(searchQuery.toLowerCase())) : 
+    files;
 
   return (
     <AppLayout title="My Files">
@@ -366,18 +397,25 @@ const FilesPage = () => {
       />
       
       {/* File Grid */}
-      <FileGrid 
-        files={sortedFiles} 
-        view={view} 
-        onFileOpen={handleFileOpen}
-        onFileDownload={handleFileDownload}
-        onFileShare={handleFileShare}
-        onFileRename={handleFileRename}
-        onFileDelete={handleFileDelete}
-        onFileCopy={handleFileCopy}
-        onFileMove={handleFileMove}
-        onFileDetails={handleFileDetails}
-      />
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+          <span>Loading files...</span>
+        </div>
+      ) : (
+        <FileGrid 
+          files={filteredFiles} 
+          view={view} 
+          onFileOpen={handleFileOpen}
+          onFileDownload={handleFileDownload}
+          onFileShare={handleFileShare}
+          onFileRename={handleFileRename}
+          onFileDelete={handleFileDelete}
+          onFileCopy={handleFileCopy}
+          onFileMove={handleFileMove}
+          onFileDetails={handleFileDetails}
+        />
+      )}
 
       {/* File Operations UI */}
       <FileOperationsDrawer
