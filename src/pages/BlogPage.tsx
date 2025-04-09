@@ -17,7 +17,7 @@ const blogPosts = [
     author: 'Maya Rodriguez',
     category: 'Product',
     tags: ['launch', 'announcement', 'product'],
-    image: '/images/blog/launch-post.jpg',
+    image: '/images/blog/launch-post.jpg'
   },
   {
     id: 2,
@@ -27,7 +27,7 @@ const blogPosts = [
     author: 'James Chen',
     category: 'Tutorials',
     tags: ['cost-saving', 'optimization', 'guide'],
-    image: '/images/blog/cloud-costs.jpg',
+    image: '/images/blog/cloud-costs.jpg'
   },
   {
     id: 3,
@@ -37,7 +37,7 @@ const blogPosts = [
     author: 'Sarah Williams',
     category: 'Security',
     tags: ['security', 'protection', 'best-practices'],
-    image: '/images/blog/security-tips.jpg',
+    image: '/images/blog/security-tips.jpg'
   },
   {
     id: 4,
@@ -47,7 +47,7 @@ const blogPosts = [
     author: 'Alex Johnson',
     category: 'Developers',
     tags: ['api', 'integration', 'development'],
-    image: '/images/blog/api-integration.jpg',
+    image: '/images/blog/api-integration.jpg'
   },
   {
     id: 5,
@@ -57,7 +57,7 @@ const blogPosts = [
     author: 'Taylor Kim',
     category: 'Industry',
     tags: ['trends', 'future', 'technology'],
-    image: '/images/blog/future-trends.jpg',
+    image: '/images/blog/future-trends.jpg'
   },
   {
     id: 6,
@@ -67,8 +67,8 @@ const blogPosts = [
     author: 'Diana Patel',
     category: 'Case Studies',
     tags: ['case-study', 'success-story', 'business'],
-    image: '/images/blog/case-study.jpg',
-  },
+    image: '/images/blog/case-study.jpg'
+  }
 ];
 
 // Categories derived from blog posts

@@ -31,7 +31,7 @@ export const Sidebar = ({ open, onToggle }: SidebarProps) => {
   const location = useLocation();
   
   const mainLinks = [
-    { label: 'Dashboard', icon: Home, path: '/' },
+    { label: 'Dashboard', icon: Home, path: '/dashboard' },
     { label: 'My Files', icon: FileText, path: '/files' },
     { label: 'Shared', icon: Share2, path: '/shared' },
     { label: 'Starred', icon: Star, path: '/starred' },

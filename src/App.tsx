@@ -68,7 +68,7 @@ function App() {
             <Route path="/team" element={<TeamPage />} />
           </Route>
           
-          {/* Fallback Route */}
+          {/* Fallback Route - Redirect to landing page if route not found */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

@@ -10,7 +10,7 @@ interface AppLayoutProps {
   title?: string;
 }
 
-export const AppLayout = ({ children, title = 'CloudUnity' }: AppLayoutProps) => {
+export const AppLayout = ({ children, title = 'Cloud Edifix' }: AppLayoutProps) => {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = React.useState(!isMobile);
 
