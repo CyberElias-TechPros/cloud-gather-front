@@ -20,7 +20,7 @@ import { FileItem } from '@/types/file';
 import { formatDistanceToNow } from 'date-fns';
 import { formatBytes } from '@/lib/utils';
 
-interface FileCardProps {
+export interface FileCardProps {
   file: FileItem;
   view: 'grid' | 'list';
   onOpen?: (file: FileItem) => void;

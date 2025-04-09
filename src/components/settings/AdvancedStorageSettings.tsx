@@ -1,252 +1,247 @@
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import React, { useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { FileType, Settings, Database, HardDrive, Wrench } from "lucide-react";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
-interface AdvancedStorageSettingsProps {
+export interface AdvancedStorageSettingsProps {
   encryptionEnabled: boolean;
   setEncryptionEnabled: (value: boolean) => void;
   deduplicationEnabled: boolean;
   setDeduplicationEnabled: (value: boolean) => void;
-  compressionLevel: number;
-  setCompressionLevel: (value: number) => void;
-  cacheSize: number;
-  setCacheSize: (value: number) => void;
-  splittingEnabled: boolean;
-  setSplittingEnabled: (value: boolean) => void;
-  maxChunkSize: number;
-  setMaxChunkSize: (value: number) => void;
-  encryptionAlgorithm: string;
-  setEncryptionAlgorithm: (value: string) => void;
+  compressionEnabled: boolean;
+  setCompressionEnabled: (value: boolean) => void;
+  autoOrganizeEnabled: boolean;
+  setAutoOrganizeEnabled: (value: boolean) => void;
+  versioningEnabled: boolean;
+  setVersioningEnabled: (value: boolean) => void;
+  maxVersions: number;
+  setMaxVersions: (value: number) => void;
+  storageTier: 'standard' | 'archive' | 'cold';
+  setStorageTier: (value: 'standard' | 'archive' | 'cold') => void;
+  retentionPeriod: number;
+  setRetentionPeriod: (value: number) => void;
+  isUpdating: boolean;
+  handleUpdate: () => void;
 }
 
-export const AdvancedStorageSettings = ({
+export const AdvancedStorageSettings: React.FC<AdvancedStorageSettingsProps> = ({
   encryptionEnabled,
   setEncryptionEnabled,
   deduplicationEnabled,
   setDeduplicationEnabled,
-  compressionLevel,
-  setCompressionLevel,
-  cacheSize,
-  setCacheSize,
-  splittingEnabled,
-  setSplittingEnabled,
-  maxChunkSize,
-  setMaxChunkSize,
-  encryptionAlgorithm,
-  setEncryptionAlgorithm
-}: AdvancedStorageSettingsProps) => {
+  compressionEnabled,
+  setCompressionEnabled,
+  autoOrganizeEnabled,
+  setAutoOrganizeEnabled,
+  versioningEnabled,
+  setVersioningEnabled,
+  maxVersions,
+  setMaxVersions,
+  storageTier,
+  setStorageTier,
+  retentionPeriod,
+  setRetentionPeriod,
+  isUpdating,
+  handleUpdate
+}) => {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          Advanced Storage Settings
-        </CardTitle>
-        <CardDescription>
-          Configure how your files are stored and optimized across providers
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* File Encryption */}
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Storage Settings</CardTitle>
+          <CardDescription>
+            Configure advanced storage options for optimizing your file storage
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {/* Security Settings */}
             <div className="space-y-4">
+              <h3 className="text-lg font-medium">Security</h3>
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="block mb-1 text-base font-medium">File Encryption</Label>
-                  <span className="text-sm text-muted-foreground">
-                    End-to-end encryption before files reach cloud providers
-                  </span>
+                  <Label htmlFor="encryption" className="font-medium">End-to-end encryption</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Encrypt files before they leave your device
+                  </p>
                 </div>
-                <Switch 
-                  checked={encryptionEnabled} 
-                  onCheckedChange={setEncryptionEnabled} 
+                <Switch
+                  id="encryption"
+                  checked={encryptionEnabled}
+                  onCheckedChange={setEncryptionEnabled}
                 />
               </div>
-              
-              {encryptionEnabled && (
-                <div className="space-y-2 ml-2 mt-2 p-3 border border-border rounded-md">
-                  <Label>Encryption Algorithm</Label>
-                  <RadioGroup 
-                    value={encryptionAlgorithm} 
-                    onValueChange={setEncryptionAlgorithm}
-                    className="flex flex-col space-y-1 mt-2"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="aes256" id="aes256" />
-                      <Label htmlFor="aes256" className="font-normal cursor-pointer">AES-256 (Recommended)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="aes128" id="aes128" />
-                      <Label htmlFor="aes128" className="font-normal cursor-pointer">AES-128 (Faster)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="twofish" id="twofish" />
-                      <Label htmlFor="twofish" className="font-normal cursor-pointer">Twofish (High Security)</Label>
-                    </div>
-                  </RadioGroup>
-                  
-                  <div className="mt-3">
-                    <Label htmlFor="encryption-key" className="text-sm">Encryption Key</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Input 
-                        id="encryption-key" 
-                        type="password" 
-                        placeholder="••••••••••••••••"
-                        className="font-mono"
-                      />
-                      <Button variant="outline" size="sm">
-                        Generate
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Store this key safely. Files cannot be recovered without it.
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
             
-            {/* File Deduplication */}
+            {/* Optimization Settings */}
             <div className="space-y-4">
+              <h3 className="text-lg font-medium">Optimization</h3>
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="block mb-1 text-base font-medium">File Deduplication</Label>
-                  <span className="text-sm text-muted-foreground">
-                    Prevent storing identical files twice across providers
-                  </span>
+                  <Label htmlFor="deduplication" className="font-medium">Deduplication</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Avoid storing duplicate files
+                  </p>
                 </div>
-                <Switch 
-                  checked={deduplicationEnabled} 
-                  onCheckedChange={setDeduplicationEnabled} 
+                <Switch
+                  id="deduplication"
+                  checked={deduplicationEnabled}
+                  onCheckedChange={setDeduplicationEnabled}
                 />
               </div>
               
-              {deduplicationEnabled && (
-                <div className="space-y-2 ml-2 mt-2 p-3 border border-border rounded-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm">Deduplication Scope</Label>
-                    <Select defaultValue="all">
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select scope" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Files</SelectItem>
-                        <SelectItem value="media">Media Files Only</SelectItem>
-                        <SelectItem value="documents">Documents Only</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Switch id="byte-level" />
-                    <Label htmlFor="byte-level" className="text-sm font-normal cursor-pointer">
-                      Enable byte-level deduplication (more efficient but slower)
-                    </Label>
-                  </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="compression" className="font-medium">Compression</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Reduce file size to save space
+                  </p>
+                </div>
+                <Switch
+                  id="compression"
+                  checked={compressionEnabled}
+                  onCheckedChange={setCompressionEnabled}
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 pt-6 md:grid-cols-2">
+            {/* Organization Settings */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Organization</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="auto-organize" className="font-medium">Auto-organize files</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically categorize and sort files
+                  </p>
+                </div>
+                <Switch
+                  id="auto-organize"
+                  checked={autoOrganizeEnabled}
+                  onCheckedChange={setAutoOrganizeEnabled}
+                />
+              </div>
+            </div>
+            
+            {/* Versioning Settings */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Versioning</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="versioning" className="font-medium">File versioning</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Keep previous versions of your files
+                  </p>
+                </div>
+                <Switch
+                  id="versioning"
+                  checked={versioningEnabled}
+                  onCheckedChange={setVersioningEnabled}
+                />
+              </div>
+              
+              {versioningEnabled && (
+                <div className="pt-2">
+                  <Label htmlFor="max-versions" className="mb-1 block font-medium">
+                    Max versions per file: {maxVersions}
+                  </Label>
+                  <Slider
+                    id="max-versions"
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={[maxVersions]}
+                    onValueChange={(value) => setMaxVersions(value[0])}
+                    className="py-2"
+                  />
                 </div>
               )}
             </div>
           </div>
           
-          <Separator />
-          
-          {/* File Compression */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">File Compression</Label>
-              <span className="text-sm text-muted-foreground">
-                {compressionLevel}%
-              </span>
-            </div>
-            <Slider
-              value={[compressionLevel]}
-              onValueChange={(values) => setCompressionLevel(values[0])}
-              max={100}
-              step={10}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>None</span>
-              <span>Medium</span>
-              <span>Maximum</span>
-            </div>
-          </div>
-          
-          {/* File Splitting */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="block mb-1 text-base font-medium">File Splitting</Label>
-                <span className="text-sm text-muted-foreground">
-                  Split large files across multiple providers
-                </span>
+          <div className="grid grid-cols-1 gap-6 pt-6 md:grid-cols-2">
+            {/* Storage Tier */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Storage Tier</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <Button
+                  variant={storageTier === 'standard' ? 'default' : 'outline'}
+                  onClick={() => setStorageTier('standard')}
+                >
+                  Standard
+                </Button>
+                <Button
+                  variant={storageTier === 'archive' ? 'default' : 'outline'}
+                  onClick={() => setStorageTier('archive')}
+                >
+                  Archive
+                </Button>
+                <Button
+                  variant={storageTier === 'cold' ? 'default' : 'outline'}
+                  onClick={() => setStorageTier('cold')}
+                >
+                  Cold
+                </Button>
               </div>
-              <Switch 
-                checked={splittingEnabled} 
-                onCheckedChange={setSplittingEnabled} 
-              />
+              <p className="text-sm text-muted-foreground">
+                {storageTier === 'standard' && 'Fast access, higher cost'}
+                {storageTier === 'archive' && 'Slower access, lower cost'}
+                {storageTier === 'cold' && 'Slowest access, lowest cost'}
+              </p>
             </div>
             
-            {splittingEnabled && (
-              <div className="space-y-2 ml-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="chunk-size">Maximum Chunk Size</Label>
-                  <span className="text-sm text-muted-foreground">
-                    {maxChunkSize} MB
-                  </span>
-                </div>
+            {/* Retention Period */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Retention Period</h3>
+              <div className="space-y-2">
+                <Label htmlFor="retention-period" className="mb-1 block font-medium">
+                  Delete files after {retentionPeriod} days of inactivity
+                </Label>
                 <Slider
-                  id="chunk-size"
-                  value={[maxChunkSize]}
-                  onValueChange={(values) => setMaxChunkSize(values[0])}
-                  min={5}
-                  max={100}
-                  step={5}
+                  id="retention-period"
+                  min={0}
+                  max={365}
+                  step={30}
+                  value={[retentionPeriod]}
+                  onValueChange={(value) => setRetentionPeriod(value[0])}
+                  className="py-2"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>5 MB</span>
-                  <span>100 MB</span>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  {retentionPeriod === 0 
+                    ? 'Files will never be automatically deleted' 
+                    : `Files unused for ${retentionPeriod} days will be automatically deleted`}
+                </p>
               </div>
-            )}
-          </div>
-          
-          {/* Caching Settings */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label className="text-base font-medium">Offline Cache Size</Label>
-              <span className="text-sm text-muted-foreground">
-                {cacheSize} MB
-              </span>
-            </div>
-            <Slider
-              value={[cacheSize]}
-              onValueChange={(values) => setCacheSize(values[0])}
-              min={100}
-              max={2000}
-              step={100}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>100 MB</span>
-              <span>1 GB</span>
-              <span>2 GB</span>
             </div>
           </div>
-        </div>
-        
-        <div className="flex justify-end">
-          <Button>Save Storage Settings</Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      
+      <div className="flex justify-end">
+        <Button onClick={handleUpdate} disabled={isUpdating}>
+          {isUpdating ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving changes...
+            </>
+          ) : (
+            'Save changes'
+          )}
+        </Button>
+      </div>
+    </div>
   );
 };

@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileGrid } from '@/components/files/FileGrid';
-import { FileItem } from '@/components/files/FileCard';
+import { FileItem } from '@/types/file';
 import { UploadProgress, UploadItem } from '@/components/uploads/UploadProgress';
 import { FileOperationsDrawer } from '@/components/files/FileOperationsDrawer';
 import { FileToolbar } from '@/components/files/FileToolbar';
@@ -20,6 +19,7 @@ import {
 } from '@/services/cloudProviders';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const FilesPage = () => {
   const { user } = useAuth();

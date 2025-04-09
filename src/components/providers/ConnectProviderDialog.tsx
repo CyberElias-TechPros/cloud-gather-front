@@ -9,11 +9,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { StorageProviderInfo } from '@/types/file';
 
-type Provider = 'google-drive' | 'dropbox' | 'onedrive' | 'box' | 'amazon-s3' | 'backblaze' | 'mega' | 'pcloud' | 'yandex-disk' | 'icedrive' | 'sync';
+// Define the provider type
+type Provider = StorageProviderInfo['type'];
 
 interface ConnectProviderDialogProps {
   open: boolean;
@@ -36,17 +38,12 @@ export const ConnectProviderDialog = ({
   onSuccess,
 }: ConnectProviderDialogProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     // Set up the global callback function
     window.handleOAuthCallback = async (code: string) => {
       if (!code) {
-        toast({
-          title: 'Authentication failed',
-          description: 'Could not connect to the provider',
-          variant: 'destructive',
-        });
+        toast.error('Authentication failed: Could not connect to the provider');
         return;
       }
       
@@ -54,11 +51,7 @@ export const ConnectProviderDialog = ({
         const { data: session } = await supabase.auth.getSession();
         
         if (!session.session) {
-          toast({
-            title: 'Authentication required',
-            description: 'Please sign in to connect a storage provider',
-            variant: 'destructive',
-          });
+          toast.error('Authentication required: Please sign in to connect a storage provider');
           return;
         }
         
@@ -72,19 +65,12 @@ export const ConnectProviderDialog = ({
         
         if (error) throw error;
         
-        toast({
-          title: 'Connection successful',
-          description: `Connected to ${formatProviderName(provider)}`,
-        });
+        toast.success(`Connected to ${formatProviderName(provider)}`);
         
         onSuccess();
       } catch (error: any) {
         console.error('Error connecting provider:', error);
-        toast({
-          title: 'Connection failed',
-          description: error.message || 'Could not complete the connection',
-          variant: 'destructive',
-        });
+        toast.error(`Connection failed: ${error.message || 'Could not complete the connection'}`);
       }
     };
     
@@ -92,7 +78,7 @@ export const ConnectProviderDialog = ({
       // Clean up the global function when the component unmounts
       delete window.handleOAuthCallback;
     };
-  }, [provider, toast, onSuccess]);
+  }, [provider, onSuccess]);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -100,11 +86,7 @@ export const ConnectProviderDialog = ({
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session.session) {
-        toast({
-          title: 'Authentication required',
-          description: 'Please sign in to connect a storage provider',
-          variant: 'destructive',
-        });
+        toast.error('Authentication required: Please sign in to connect a storage provider');
         return;
       }
       
@@ -122,11 +104,7 @@ export const ConnectProviderDialog = ({
       
     } catch (error: any) {
       console.error('Error initiating OAuth flow:', error);
-      toast({
-        title: 'Connection failed',
-        description: error.message || 'Could not start the connection process',
-        variant: 'destructive',
-      });
+      toast.error(`Connection failed: ${error.message || 'Could not start the connection process'}`);
     } finally {
       setIsConnecting(false);
       onClose();
@@ -186,7 +164,7 @@ export const ConnectProviderDialog = ({
             You'll be redirected to {formatProviderName(provider)} to authorize access to your files.
           </p>
           <p className="text-sm text-muted-foreground text-center">
-            CloudUnity needs access to list and download your files, but will never modify or delete anything without your permission.
+            Cloud Edifix needs access to list and download your files, but will never modify or delete anything without your permission.
           </p>
         </div>
 

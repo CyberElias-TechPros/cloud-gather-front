@@ -1,181 +1,245 @@
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import {
+import { formatBytes } from '@/lib/utils';
+import { 
+  Settings, 
+  RefreshCw, 
+  Loader2,
+  Unplug,
+  AlertCircle,
+  Check,
+  Cloud,
+  PlusCircle
+} from 'lucide-react';
+import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Cloud,
-  ArrowUp,
-  ArrowDown,
-  MoreVertical,
-  RefreshCw,
-  Trash2,
-  AlertCircle,
-  Plus,
-} from 'lucide-react';
 import { ConnectProviderDialog } from './ConnectProviderDialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { StorageProviderInfo } from '@/types/file';
+import {
+  GoogleDriveIcon,
+  DropboxIcon,
+  OneDriveIcon,
+  BoxIcon,
+  AmazonS3Icon,
+  BackblazeIcon,
+  MegaIcon,
+  PCloudIcon,
+  YandexDiskIcon,
+  IcedriveIcon,
+  SyncIcon
+} from '@/components/icons/provider-icons';
 
-export interface ProviderInfo {
-  id: string;
-  name: string;
-  type: 'google-drive' | 'dropbox' | 'onedrive' | 'add';
-  totalSpace?: number;
-  usedSpace?: number;
-  status?: 'connected' | 'disconnected' | 'error';
-  priority?: number;
-}
+// Define a type that explicitly includes 'add' as a provider type
+type ProviderType = StorageProviderInfo['type'] | 'add';
 
 interface ProviderCardProps {
-  provider: ProviderInfo;
-  onConnect?: (provider: ProviderInfo) => void;
-  onDisconnect?: (provider: ProviderInfo) => void;
-  onChangePriority?: (provider: ProviderInfo, direction: 'up' | 'down') => void;
+  provider: StorageProviderInfo;
+  onConnect?: (provider: StorageProviderInfo['type']) => void;
+  onDisconnect?: (providerId: string) => void;
+  onRefresh?: (providerId: string) => void;
 }
 
-export const ProviderCard = ({
+export const ProviderCard: React.FC<ProviderCardProps> = ({
   provider,
   onConnect,
   onDisconnect,
-  onChangePriority,
-}: ProviderCardProps) => {
+  onRefresh
+}) => {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<'google-drive' | 'dropbox' | 'onedrive' | null>(null);
-
-  const formatSize = (bytes: number | undefined) => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  
+  const handleConnect = () => {
+    if (provider.type === 'add') {
+      // This is the "Add Provider" card
+      return;
+    }
+    
+    setConnectDialogOpen(true);
   };
-
-  const getPercentage = (used: number | undefined, total: number | undefined) => {
-    if (!used || !total) return 0;
-    return Math.round((used / total) * 100);
+  
+  const handleDisconnect = async () => {
+    if (!onDisconnect || provider.type === 'add' || !provider.id) return;
+    
+    setIsDisconnecting(true);
+    try {
+      await onDisconnect(provider.id);
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+  
+  const handleRefresh = async () => {
+    if (!onRefresh || provider.type === 'add' || !provider.id) return;
+    
+    setIsRefreshing(true);
+    try {
+      await onRefresh(provider.id);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  const handleConnectSuccess = () => {
+    setConnectDialogOpen(false);
+    if (onConnect && provider.type !== 'add') {
+      onConnect(provider.type);
+    }
   };
 
   const getProviderIcon = () => {
     switch (provider.type) {
       case 'google-drive':
-        return (
-          <div className="bg-red-100 text-red-600 p-3 rounded-full">
-            <Cloud className="h-6 w-6" />
-          </div>
-        );
+        return <GoogleDriveIcon className="h-8 w-8" />;
       case 'dropbox':
-        return (
-          <div className="bg-blue-100 text-blue-600 p-3 rounded-full">
-            <Cloud className="h-6 w-6" />
-          </div>
-        );
+        return <DropboxIcon className="h-8 w-8" />;
       case 'onedrive':
-        return (
-          <div className="bg-purple-100 text-purple-600 p-3 rounded-full">
-            <Cloud className="h-6 w-6" />
-          </div>
-        );
+        return <OneDriveIcon className="h-8 w-8" />;
+      case 'box':
+        return <BoxIcon className="h-8 w-8" />;
+      case 'amazon-s3':
+        return <AmazonS3Icon className="h-8 w-8" />;
+      case 'backblaze':
+        return <BackblazeIcon className="h-8 w-8" />;
+      case 'mega':
+        return <MegaIcon className="h-8 w-8" />;
+      case 'pcloud':
+        return <PCloudIcon className="h-8 w-8" />;
+      case 'yandex-disk':
+        return <YandexDiskIcon className="h-8 w-8" />;
+      case 'icedrive':
+        return <IcedriveIcon className="h-8 w-8" />;
+      case 'sync':
+        return <SyncIcon className="h-8 w-8" />;
       case 'add':
-        return (
-          <div className="bg-gray-100 text-gray-600 p-3 rounded-full">
-            <Plus className="h-6 w-6" />
-          </div>
-        );
+        return <PlusCircle className="h-8 w-8 text-muted-foreground" />;
       default:
-        return (
-          <div className="bg-gray-100 text-gray-600 p-3 rounded-full">
-            <Cloud className="h-6 w-6" />
-          </div>
-        );
+        return <Cloud className="h-8 w-8 text-muted-foreground" />;
     }
   };
-
-  const handleConnect = (providerType: 'google-drive' | 'dropbox' | 'onedrive') => {
-    setSelectedProvider(providerType);
-    setConnectDialogOpen(true);
-  };
-
-  const handleConnectSuccess = () => {
-    if (onConnect) {
-      onConnect(provider);
+  
+  const getStatusIndicator = () => {
+    if (provider.type === 'add') return null;
+    
+    if (!provider.status || provider.status === 'disconnected') {
+      return (
+        <div className="flex items-center text-muted-foreground">
+          <Unplug className="h-4 w-4 mr-1" />
+          <span>Disconnected</span>
+        </div>
+      );
+    } else if (provider.status === 'error') {
+      return (
+        <div className="flex items-center text-destructive">
+          <AlertCircle className="h-4 w-4 mr-1" />
+          <span>Error</span>
+        </div>
+      );
+    } else {
+      return (
+        <div className="flex items-center text-green-500">
+          <Check className="h-4 w-4 mr-1" />
+          <span>Connected</span>
+        </div>
+      );
     }
   };
-
-  const handleDisconnect = () => {
-    setDisconnectDialogOpen(true);
-  };
-
-  const confirmDisconnect = () => {
-    if (onDisconnect) {
-      onDisconnect(provider);
-    }
-    setDisconnectDialogOpen(false);
-  };
-
+  
+  // Special case for the "Add Provider" card
   if (provider.type === 'add') {
     return (
-      <Card className="flex flex-col justify-center items-center h-full min-h-[200px]">
-        <CardContent className="pt-6 text-center">
-          <div className="mb-4 flex justify-center">
-            <Plus className="h-10 w-10 text-muted-foreground" />
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center justify-center p-6 h-full min-h-[220px]">
+          <div className="mb-4 text-muted-foreground">
+            {getProviderIcon()}
           </div>
-          <h3 className="text-lg font-medium mb-2">Add Storage Provider</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Connect a new cloud storage service
+          <h3 className="text-lg font-medium mb-2 text-center">Add Cloud Provider</h3>
+          <p className="text-sm text-muted-foreground text-center mb-4">
+            Connect another cloud storage provider
           </p>
-          <div className="flex justify-center gap-2 mt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleConnect('google-drive')}
-              className="flex items-center gap-2"
-            >
-              <div className="w-4 h-4">
-                <svg viewBox="0 0 24 24" className="text-red-500">
-                  <path
-                    fill="currentColor"
-                    d="M8.34 14.84c-1.72 0-3.12-1.41-3.12-3.13s1.4-3.13 3.12-3.13c.9 0 1.69.39 2.26 1.01L14.25 5c-1.62-1.42-3.72-2.3-6.03-2.3C3.9 2.7 0 6.6 0 11.35S3.9 20 8.22 20c2.6 0 4.97-1.21 6.53-3.11l-3.77-4.08c-.56.72-1.47 1.2-2.48 1.2z"
-                  />
-                </svg>
-              </div>
-              Google Drive
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleConnect('dropbox')}
-              className="flex items-center gap-2"
-            >
-              <div className="w-4 h-4 text-blue-500">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 2l6 4-6 4 6 4-6 4 6 4-6 4V2z" />
-                </svg>
-              </div>
-              Dropbox
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleConnect('onedrive')}
-              className="flex items-center gap-2"
-            >
-              <div className="w-4 h-4 text-blue-600">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.08 12.75c-1.7 0-3.16 1.01-3.82 2.44H7.79c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5h8.47c.66 1.43 2.12 2.44 3.82 2.44 2.32 0 4.21-1.89 4.21-4.19s-1.89-4.19-4.21-4.19z" />
-                </svg>
-              </div>
-              OneDrive
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Provider
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('google-drive')}
+              >
+                <GoogleDriveIcon className="mr-2 h-4 w-4" />
+                Google Drive
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('dropbox')}
+              >
+                <DropboxIcon className="mr-2 h-4 w-4" />
+                Dropbox
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('onedrive')}
+              >
+                <OneDriveIcon className="mr-2 h-4 w-4" />
+                OneDrive
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('box')}
+              >
+                <BoxIcon className="mr-2 h-4 w-4" />
+                Box
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('amazon-s3')}
+              >
+                <AmazonS3Icon className="mr-2 h-4 w-4" />
+                Amazon S3
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('backblaze')}
+              >
+                <BackblazeIcon className="mr-2 h-4 w-4" />
+                Backblaze B2
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('mega')}
+              >
+                <MegaIcon className="mr-2 h-4 w-4" />
+                MEGA
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('pcloud')}
+              >
+                <PCloudIcon className="mr-2 h-4 w-4" />
+                pCloud
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('yandex-disk')}
+              >
+                <YandexDiskIcon className="mr-2 h-4 w-4" />
+                Yandex Disk
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('icedrive')}
+              >
+                <IcedriveIcon className="mr-2 h-4 w-4" />
+                Icedrive
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onConnect && onConnect('sync')}
+              >
+                <SyncIcon className="mr-2 h-4 w-4" />
+                Sync.com
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </CardContent>
       </Card>
     );
@@ -183,134 +247,124 @@ export const ProviderCard = ({
 
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex justify-between items-start mb-4">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-center">
           <div className="flex items-center">
             {getProviderIcon()}
-            <div className="ml-3">
-              <h3 className="font-medium">{provider.name}</h3>
-              {provider.status && (
-                <Badge
-                  variant={provider.status === 'connected' ? 'outline' : 'secondary'}
-                  className={
-                    provider.status === 'connected'
-                      ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                      : provider.status === 'error'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-100'
-                      : ''
-                  }
-                >
-                  {provider.status === 'connected' ? 'Connected' : 'Disconnected'}
-                </Badge>
-              )}
+            <div className="ml-2">
+              <CardTitle className="text-lg">{provider.name}</CardTitle>
+              {getStatusIndicator()}
             </div>
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onChangePriority && (
-                <>
-                  <DropdownMenuItem onClick={() => onChangePriority(provider, 'up')}>
-                    <ArrowUp className="mr-2 h-4 w-4" />
-                    Move Up
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onChangePriority(provider, 'down')}>
-                    <ArrowDown className="mr-2 h-4 w-4" />
-                    Move Down
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-
-              <DropdownMenuItem>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
-              </DropdownMenuItem>
-
-              {provider.status === 'connected' && onDisconnect && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDisconnect} className="text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Disconnect
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {provider.status === 'connected' && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleRefresh}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDisconnect} className="text-destructive">
+                  <Unplug className="mr-2 h-4 w-4" />
+                  Disconnect
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
-
-        {provider.status === 'error' && (
-          <div className="mb-4 p-2 bg-red-50 rounded-md text-red-600 text-sm flex items-center">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            Connection error
-          </div>
-        )}
-
-        {provider.totalSpace !== undefined && provider.usedSpace !== undefined && (
-          <div className="space-y-2 mt-4">
-            <div className="flex justify-between text-sm">
-              <span>Storage</span>
-              <span>
-                {formatSize(provider.usedSpace)} of {formatSize(provider.totalSpace)}
-              </span>
+      </CardHeader>
+      
+      {provider.status === 'connected' && (
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-muted-foreground">
+                  {formatBytes(provider.usedSpace || 0)} of {formatBytes(provider.totalSpace || 0)}
+                </span>
+                <span className="text-muted-foreground">
+                  {provider.totalSpace && provider.usedSpace 
+                    ? Math.round((provider.usedSpace / provider.totalSpace) * 100) 
+                    : 0}%
+                </span>
+              </div>
+              <Progress 
+                value={provider.totalSpace && provider.usedSpace 
+                  ? (provider.usedSpace / provider.totalSpace) * 100 
+                  : 0} 
+                className="h-2" 
+              />
             </div>
-            <Progress
-              value={getPercentage(provider.usedSpace, provider.totalSpace)}
-              className="h-2"
-            />
-            <div className="text-xs text-right text-muted-foreground">
-              {getPercentage(provider.usedSpace, provider.totalSpace)}% used
-            </div>
+            {provider.freeStorageSize && (
+              <p className="text-sm text-muted-foreground">
+                Free Space: {provider.freeStorageSize}
+              </p>
+            )}
           </div>
-        )}
-      </CardContent>
-
-      <CardFooter className="pt-0">
-        {provider.status === 'disconnected' || provider.status === 'error' ? (
-          <Button
-            onClick={() => handleConnect(provider.type)}
-            variant="secondary"
+        </CardContent>
+      )}
+      
+      <CardFooter>
+        {provider.status !== 'connected' ? (
+          <Button 
+            onClick={handleConnect} 
             className="w-full"
           >
             Connect
           </Button>
         ) : (
-          <Button variant="outline" className="w-full">
-            View Files
-          </Button>
+          <div className="w-full flex justify-between">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Refreshing
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </>
+              )}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleDisconnect}
+              disabled={isDisconnecting}
+            >
+              {isDisconnecting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Disconnecting
+                </>
+              ) : (
+                <>
+                  <Unplug className="mr-2 h-4 w-4" />
+                  Disconnect
+                </>
+              )}
+            </Button>
+          </div>
         )}
       </CardFooter>
-
-      <ConnectProviderDialog
-        open={connectDialogOpen}
+      
+      {/* Connect Provider Dialog */}
+      <ConnectProviderDialog 
+        open={connectDialogOpen} 
         onClose={() => setConnectDialogOpen(false)}
-        provider={selectedProvider!}
+        provider={provider.type}
         onSuccess={handleConnectSuccess}
       />
-
-      <AlertDialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect {provider.name}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to disconnect {provider.name}? This will remove access to files
-              stored on this service.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDisconnect} className="bg-red-600 hover:bg-red-700">
-              Disconnect
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   );
 };

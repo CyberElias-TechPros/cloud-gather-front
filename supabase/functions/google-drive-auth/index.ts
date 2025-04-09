@@ -7,11 +7,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-const REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
+const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+const REDIRECT_URI = Deno.env.get('REDIRECT_URI') || 'http://localhost:3000/providers';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -20,159 +20,172 @@ serve(async (req) => {
   }
 
   try {
-    if (req.method === 'GET') {
-      // Initial auth URL generation
-      const scopes = [
-        'https://www.googleapis.com/auth/drive.metadata.readonly',
-        'https://www.googleapis.com/auth/drive.readonly',
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/drive.appdata',
-      ];
-
-      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-      authUrl.searchParams.append('client_id', CLIENT_ID);
-      authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
-      authUrl.searchParams.append('response_type', 'code');
-      authUrl.searchParams.append('scope', scopes.join(' '));
-      authUrl.searchParams.append('access_type', 'offline');
-      authUrl.searchParams.append('prompt', 'consent');
-
+    const url = new URL(req.url);
+    const path = url.pathname.split('/').pop();
+    
+    // Step 1: Generate authorization URL for Google OAuth
+    if (req.method === 'POST' && !path?.includes('callback')) {
+      const { session } = await req.json();
+      
+      // We need to save the session token to use it in the callback
+      // For a real application, use a proper session store
+      
+      // Generate OAuth URL
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email');
+      const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${scope}&response_type=code&access_type=offline&prompt=consent`;
+      
       return new Response(
-        JSON.stringify({ url: authUrl.toString() }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
+        JSON.stringify({ url: authUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    if (req.method === 'POST') {
-      // Handle code exchange
-      const { code, session } = await req.json();
-
-      // Exchange code for tokens
+    
+    // Step 2: Handle callback from Google with auth code
+    if (req.method === 'GET' && path?.includes('callback')) {
+      const code = url.searchParams.get('code');
+      
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'No authorization code provided' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Exchange the code for access and refresh tokens
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
         body: new URLSearchParams({
           code,
-          client_id: CLIENT_ID,
-          client_secret: CLIENT_SECRET,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
           redirect_uri: REDIRECT_URI,
           grant_type: 'authorization_code',
         }),
       });
-
+      
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json();
-        console.error('Error exchanging code for tokens:', errorData);
-        throw new Error('Failed to exchange code for tokens');
+        console.error('Error exchanging code for token:', errorData);
+        throw new Error('Failed to exchange authorization code for tokens');
       }
-
+      
       const tokenData = await tokenResponse.json();
-
-      // Get user info
-      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      
+      // Get user info from Google
+      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
       });
-
+      
       if (!userInfoResponse.ok) {
-        console.error('Failed to fetch user info');
         throw new Error('Failed to fetch user info');
       }
-
+      
       const userInfo = await userInfoResponse.json();
-
-      // Get drive info
-      const aboutResponse = await fetch('https://www.googleapis.com/drive/v3/about?fields=storageQuota', {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      
+      // Get Google Drive storage quota
+      const driveResponse = await fetch('https://www.googleapis.com/drive/v3/about?fields=storageQuota', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
       });
-
-      if (!aboutResponse.ok) {
-        console.error('Failed to fetch drive info');
+      
+      if (!driveResponse.ok) {
         throw new Error('Failed to fetch drive info');
       }
-
-      const aboutInfo = await aboutResponse.json();
-      const totalSpace = aboutInfo.storageQuota.limit ? Number(aboutInfo.storageQuota.limit) : null;
-      const usedSpace = aboutInfo.storageQuota.usage ? Number(aboutInfo.storageQuota.usage) : 0;
-
-      // Create Supabase client with user's session
+      
+      const driveInfo = await driveResponse.json();
+      const storageQuota = driveInfo.storageQuota || {};
+      
+      // Get the session from the query param
+      const sessionToken = url.searchParams.get('session');
+      
+      if (!sessionToken) {
+        return new Response(
+          JSON.stringify({ error: 'No session token provided' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Create Supabase client with the user's session
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: {
           headers: {
-            Authorization: `Bearer ${session}`,
+            Authorization: `Bearer ${sessionToken}`,
           },
         },
       });
-
-      // Save provider info to database
-      const { data, error } = await supabase
-        .from('storage_providers')
-        .insert({
-          provider_name: 'google-drive',
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-          total_space: totalSpace,
-          used_space: usedSpace,
-          status: 'connected',
-          provider_user_email: userInfo.email,
-          // Get current count of providers for priority
-          priority: await getProviderCount(supabase) + 1,
-        })
-        .select()
-        .single();
-
+      
+      // Get the user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Failed to get user information');
+      }
+      
+      // Save the provider information to the database
+      const { data, error } = await supabase.from('storage_providers').insert({
+        user_id: user.id,
+        provider_name: 'google-drive',
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+        total_space: parseInt(storageQuota.limit || '0'),
+        used_space: parseInt(storageQuota.usage || '0'),
+        provider_user_email: userInfo.email,
+        status: 'connected',
+        priority: 1, // Default priority for new provider
+      }).select();
+      
       if (error) {
-        console.error('Error saving provider to database:', error);
+        console.error('Error saving provider information:', error);
         throw error;
       }
-
-      return new Response(
-        JSON.stringify({ 
-          provider: {
-            id: data.id,
-            name: 'Google Drive',
-            email: userInfo.email,
-            totalSpace,
-            usedSpace
-          }
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
-      );
+      
+      // Return an HTML page that will close the popup and call the window.opener function
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Authentication Successful</title>
+          <script>
+            window.onload = function() {
+              if (window.opener) {
+                window.opener.handleOAuthCallback('${code}');
+                window.close();
+              } else {
+                document.getElementById('message').innerText = 'Authentication successful! You can close this window.';
+              }
+            }
+          </script>
+        </head>
+        <body>
+          <div id="message">Completing authentication...</div>
+        </body>
+        </html>
+      `, {
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      });
     }
-
-    // If we get here, it's an unsupported method
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 405,
-    });
-
+    
+    // If we get here, it's an unsupported request
+    return new Response(
+      JSON.stringify({ error: 'Unsupported request' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+    
   } catch (error) {
     console.error('Error in Google Drive auth function:', error);
+    
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-
-async function getProviderCount(supabase) {
-  const { count, error } = await supabase
-    .from('storage_providers')
-    .select('*', { count: 'exact', head: true });
-
-  if (error) {
-    console.error('Error counting providers:', error);
-    return 0;
-  }
-
-  return count || 0;
-}

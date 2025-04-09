@@ -7,7 +7,7 @@ import { Toaster } from 'sonner';
 
 // Public pages
 import LandingPage from './pages/LandingPage';
-import AuthPage from './pages/Auth';
+import AuthPage from './pages/AuthPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';

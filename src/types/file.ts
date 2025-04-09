@@ -103,3 +103,14 @@ export interface FileAccessStats {
   user_agent: string | null;
   access_type: 'view' | 'download' | 'edit' | 'print';
 }
+
+export type FileShare = {
+  id: string;
+  file_id: string;
+  owner_id: string;
+  shared_with_email: string | null;
+  shared_with_id: string | null;
+  permission_level: 'view' | 'edit' | 'admin';
+  created_at: string;
+  expires_at: string | null;
+};

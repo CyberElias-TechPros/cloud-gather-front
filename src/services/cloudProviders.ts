@@ -1,10 +1,11 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { FileItem, FileShare, StorageProviderInfo } from "@/types/file";
 
 export interface StorageProvider {
   id: string;
   user_id: string;
-  provider_name: 'google-drive' | 'dropbox' | 'onedrive';
+  provider_name: 'google-drive' | 'dropbox' | 'onedrive' | 'box' | 'amazon-s3' | 'backblaze' | 'mega' | 'pcloud' | 'yandex-disk' | 'icedrive' | 'sync';
   access_token: string | null;
   refresh_token: string | null;
   token_expires_at: string | null;
@@ -15,35 +16,6 @@ export interface StorageProvider {
   provider_user_email: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface FileItem {
-  id: string;
-  user_id: string;
-  filename: string;
-  size: number;
-  mime_type: string | null;
-  provider_id: string | null;
-  provider_file_id: string | null;
-  parent_folder_id: string | null;
-  is_folder: boolean;
-  is_starred: boolean;
-  is_shared: boolean;
-  path: string;
-  created_at: string;
-  updated_at: string;
-  last_accessed_at: string | null;
-}
-
-export interface FileShare {
-  id: string;
-  file_id: string;
-  owner_id: string;
-  shared_with_email: string | null;
-  shared_with_id: string | null;
-  permission_level: 'view' | 'edit' | 'admin';
-  created_at: string;
-  expires_at: string | null;
 }
 
 export const getStorageProviders = async (): Promise<StorageProvider[]> => {
@@ -57,17 +29,23 @@ export const getStorageProviders = async (): Promise<StorageProvider[]> => {
     throw error;
   }
 
-  return data || [];
+  return data as StorageProvider[] || [];
 };
 
 export const connectProvider = async (
-  providerName: 'google-drive' | 'dropbox' | 'onedrive',
+  providerName: StorageProvider['provider_name'],
   accessToken: string,
   refreshToken: string,
   expiresAt: string,
   userEmail: string,
   totalSpace: number
 ): Promise<StorageProvider> => {
+  // Get user ID from the session
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    throw new Error('User not authenticated');
+  }
+
   // Get the count of existing providers to determine priority
   const { count, error: countError } = await supabase
     .from('storage_providers')
@@ -92,6 +70,7 @@ export const connectProvider = async (
       priority,
       status: 'connected',
       provider_user_email: userEmail,
+      user_id: userData.user.id
     })
     .select()
     .single();
@@ -101,7 +80,7 @@ export const connectProvider = async (
     throw error;
   }
 
-  return data;
+  return data as StorageProvider;
 };
 
 export const disconnectProvider = async (providerId: string): Promise<void> => {
@@ -235,6 +214,12 @@ export const createFolder = async (
   folderName: string,
   parentFolderId: string | null = null
 ): Promise<FileItem> => {
+  // Get user ID from the session
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    throw new Error('User not authenticated');
+  }
+
   // Determine the path
   let path = `/${folderName}`;
   
@@ -260,7 +245,8 @@ export const createFolder = async (
       size: 0,
       path,
       parent_folder_id: parentFolderId,
-      is_folder: true
+      is_folder: true,
+      user_id: userData.user.id
     })
     .select()
     .single();
@@ -278,6 +264,12 @@ export const uploadFile = async (
   parentFolderId: string | null = null,
   providerId: string | null = null
 ): Promise<FileItem> => {
+  // Get user ID from the session
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    throw new Error('User not authenticated');
+  }
+
   // Determine the path
   let path = `/${file.name}`;
   
@@ -297,8 +289,7 @@ export const uploadFile = async (
   }
 
   // First, upload the file to Supabase Storage
-  const { data: userId } = await supabase.auth.getUser();
-  const filePath = `${userId.user?.id}/${Date.now()}_${file.name}`;
+  const filePath = `${userData.user.id}/${Date.now()}_${file.name}`;
   
   const { data: storageData, error: storageError } = await supabase
     .storage
@@ -320,7 +311,8 @@ export const uploadFile = async (
       path,
       parent_folder_id: parentFolderId,
       provider_id: providerId,
-      provider_file_id: storageData.path
+      provider_file_id: storageData.path,
+      user_id: userData.user.id
     })
     .select()
     .single();
@@ -436,6 +428,12 @@ export const shareFile = async (
   permissionLevel: 'view' | 'edit' | 'admin' = 'view',
   expiresAt: string | null = null
 ): Promise<FileShare> => {
+  // Get user ID from the session
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    throw new Error('User not authenticated');
+  }
+
   // First, update the file to mark it as shared
   const { error: fileUpdateError } = await supabase
     .from('files')
@@ -452,6 +450,7 @@ export const shareFile = async (
     .from('file_shares')
     .insert({
       file_id: fileId,
+      owner_id: userData.user.id,
       shared_with_email: sharedWithEmail,
       permission_level: permissionLevel,
       expires_at: expiresAt
@@ -464,7 +463,7 @@ export const shareFile = async (
     throw error;
   }
 
-  return data;
+  return data as FileShare;
 };
 
 export const getFileSharesForFile = async (fileId: string): Promise<FileShare[]> => {
@@ -478,7 +477,7 @@ export const getFileSharesForFile = async (fileId: string): Promise<FileShare[]>
     throw error;
   }
 
-  return data || [];
+  return data as FileShare[] || [];
 };
 
 export const removeFileShare = async (shareId: string): Promise<void> => {
