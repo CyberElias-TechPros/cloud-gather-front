@@ -10,7 +10,7 @@ export interface BlogPost {
   author: string;
   category: string;
   tags: string[];
-  image: string;
+  image: string | null;
   slug: string;
 }
 
@@ -34,7 +34,6 @@ export const fetchBlogPosts = async (): Promise<BlogPost[]> => {
     }));
   } catch (error) {
     console.error('Failed to fetch blog posts:', error);
-    // Return empty array instead of sample data
     return [];
   }
 };
