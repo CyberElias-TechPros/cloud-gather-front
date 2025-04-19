@@ -42,7 +42,7 @@ export const Header = ({ title = 'Dashboard', sidebarOpen, onSidebarToggle }: He
       return user.email.substring(0, 2).toUpperCase();
     }
     
-    return 'CU';
+    return 'CE';
   };
 
   return (

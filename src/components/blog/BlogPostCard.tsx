@@ -5,12 +5,31 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Calendar, User } from 'lucide-react';
 import type { BlogPost } from '@/services/blogService';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface BlogPostCardProps {
   post: BlogPost;
+  isLoading?: boolean;
 }
 
-export const BlogPostCard: React.FC<BlogPostCardProps> = ({ post }) => {
+export const BlogPostCard: React.FC<BlogPostCardProps> = ({ post, isLoading = false }) => {
+  if (isLoading) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="aspect-video bg-muted relative">
+          <Skeleton className="h-full w-full" />
+        </div>
+        <CardContent className="p-6">
+          <Skeleton className="h-6 w-3/4 mb-2" />
+          <Skeleton className="h-4 w-1/2 mb-4" />
+          <Skeleton className="h-4 w-full mb-2" />
+          <Skeleton className="h-4 w-full mb-4" />
+          <Skeleton className="h-4 w-1/3" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="aspect-video bg-muted relative">

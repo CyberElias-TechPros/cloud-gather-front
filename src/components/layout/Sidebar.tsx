@@ -60,7 +60,7 @@ export const Sidebar = ({ open, onToggle }: SidebarProps) => {
             "ml-2 text-lg font-bold transition-opacity",
             open ? "opacity-100" : "opacity-0"
           )}>
-            CloudUnity
+            Cloud Edifix
           </span>
         </div>
         <Button 
