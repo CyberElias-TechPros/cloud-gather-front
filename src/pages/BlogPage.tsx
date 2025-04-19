@@ -1,80 +1,57 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowRight, Search, Calendar, User, Tag } from 'lucide-react';
-
-// Sample blog posts data
-const blogPosts = [
-  {
-    id: 1,
-    title: 'Introducing Cloud Edifix: A New Way to Manage Your Cloud Storage',
-    excerpt: 'We're excited to announce the launch of Cloud Edifix, the platform that unifies all your cloud storage providers in one place.',
-    date: new Date('2025-04-01'),
-    author: 'Maya Rodriguez',
-    category: 'Product',
-    tags: ['launch', 'announcement', 'product'],
-    image: '/images/blog/launch-post.jpg'
-  },
-  {
-    id: 2,
-    title: 'How to Optimize Your Cloud Storage and Save Money',
-    excerpt: 'Learn practical strategies to manage your cloud storage more efficiently and reduce costs across multiple providers.',
-    date: new Date('2025-03-25'),
-    author: 'James Chen',
-    category: 'Tutorials',
-    tags: ['cost-saving', 'optimization', 'guide'],
-    image: '/images/blog/cloud-costs.jpg'
-  },
-  {
-    id: 3,
-    title: '5 Security Best Practices for Cloud Storage in 2025',
-    excerpt: 'Keep your files safe with these essential security measures for protecting your data across multiple cloud storage providers.',
-    date: new Date('2025-03-18'),
-    author: 'Sarah Williams',
-    category: 'Security',
-    tags: ['security', 'protection', 'best-practices'],
-    image: '/images/blog/security-tips.jpg'
-  },
-  {
-    id: 4,
-    title: 'Cloud Edifix API: Build Powerful Integrations with Your Apps',
-    excerpt: 'Discover how to leverage the Cloud Edifix API to create custom applications and automate your workflow.',
-    date: new Date('2025-03-10'),
-    author: 'Alex Johnson',
-    category: 'Developers',
-    tags: ['api', 'integration', 'development'],
-    image: '/images/blog/api-integration.jpg'
-  },
-  {
-    id: 5,
-    title: 'The Future of Cloud Storage: Trends to Watch in 2025',
-    excerpt: 'Explore emerging technologies and trends shaping the future of cloud storage and file management.',
-    date: new Date('2025-03-02'),
-    author: 'Taylor Kim',
-    category: 'Industry',
-    tags: ['trends', 'future', 'technology'],
-    image: '/images/blog/future-trends.jpg'
-  },
-  {
-    id: 6,
-    title: 'Case Study: How TechCorp Saved 40% on Storage Costs with Cloud Edifix',
-    excerpt: 'Learn how a leading tech company optimized their cloud storage strategy and achieved significant cost savings.',
-    date: new Date('2025-02-20'),
-    author: 'Diana Patel',
-    category: 'Case Studies',
-    tags: ['case-study', 'success-story', 'business'],
-    image: '/images/blog/case-study.jpg'
-  }
-];
-
-// Categories derived from blog posts
-const categories = Array.from(new Set(blogPosts.map(post => post.category)));
+import { ArrowRight, Search, Calendar, User, Tag, Loader2 } from 'lucide-react';
+import { BlogPostCard } from '@/components/blog/BlogPostCard';
+import { fetchBlogPosts, fetchBlogPostsByCategory, type BlogPost } from '@/services/blogService';
 
 const BlogPage = () => {
+  const [loading, setLoading] = useState(true);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentCategory, setCurrentCategory] = useState('all');
+
+  // Derive categories from blog posts
+  const categories = Array.from(new Set(blogPosts.map(post => post.category)));
+
+  useEffect(() => {
+    const loadBlogPosts = async () => {
+      setLoading(true);
+      try {
+        let posts;
+        if (currentCategory === 'all') {
+          posts = await fetchBlogPosts();
+        } else {
+          posts = await fetchBlogPostsByCategory(currentCategory);
+        }
+        setBlogPosts(posts);
+      } catch (error) {
+        console.error('Error loading blog posts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadBlogPosts();
+  }, [currentCategory]);
+
+  // Filter posts based on search query
+  const filteredPosts = searchQuery 
+    ? blogPosts.filter(post => 
+        post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        post.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : blogPosts;
+
+  const handleCategoryChange = (category: string) => {
+    setCurrentCategory(category);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header/Navigation */}
@@ -130,6 +107,8 @@ const BlogPage = () => {
               type="search" 
               placeholder="Search articles..." 
               className="pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
@@ -137,7 +116,7 @@ const BlogPage = () => {
       
       {/* Categories */}
       <div className="container mx-auto mb-12">
-        <Tabs defaultValue="all">
+        <Tabs defaultValue="all" value={currentCategory} onValueChange={handleCategoryChange}>
           <TabsList className="w-full justify-start overflow-auto py-2">
             <TabsTrigger value="all">All Posts</TabsTrigger>
             {categories.map(category => (
@@ -146,87 +125,42 @@ const BlogPage = () => {
           </TabsList>
           
           <TabsContent value="all" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {blogPosts.map(post => (
-                <Card key={post.id} className="overflow-hidden">
-                  <div className="aspect-video bg-muted relative">
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                      <div className="text-white">
-                        <h3 className="font-bold text-lg mb-2">{post.title}</h3>
-                        <div className="flex items-center text-xs space-x-4">
-                          <div className="flex items-center">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {post.date.toLocaleDateString(undefined, {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </div>
-                          <div className="flex items-center">
-                            <User className="h-3 w-3 mr-1" />
-                            {post.author}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <CardContent className="p-6">
-                    <div className="flex items-center mb-4">
-                      <span className="bg-primary/10 text-primary text-xs py-1 px-2 rounded-full">
-                        {post.category}
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground text-sm mb-4">
-                      {post.excerpt}
-                    </p>
-                    <Button variant="link" className="px-0">
-                      Read more <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : filteredPosts.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No blog posts found matching your search.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredPosts.map(post => (
+                  <BlogPostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
           </TabsContent>
           
           {categories.map(category => (
             <TabsContent key={category} value={category} className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {blogPosts
-                  .filter(post => post.category === category)
-                  .map(post => (
-                    <Card key={post.id} className="overflow-hidden">
-                      <div className="aspect-video bg-muted relative">
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                          <div className="text-white">
-                            <h3 className="font-bold text-lg mb-2">{post.title}</h3>
-                            <div className="flex items-center text-xs space-x-4">
-                              <div className="flex items-center">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                {post.date.toLocaleDateString(undefined, {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric'
-                                })}
-                              </div>
-                              <div className="flex items-center">
-                                <User className="h-3 w-3 mr-1" />
-                                {post.author}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <CardContent className="p-6">
-                        <p className="text-muted-foreground text-sm mb-4">
-                          {post.excerpt}
-                        </p>
-                        <Button variant="link" className="px-0">
-                          Read more <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      </CardContent>
-                    </Card>
-                ))}
-              </div>
+              {loading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredPosts.filter(post => post.category === category).length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No blog posts found in this category.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredPosts
+                    .filter(post => post.category === category)
+                    .map(post => (
+                      <BlogPostCard key={post.id} post={post} />
+                    ))}
+                </div>
+              )}
             </TabsContent>
           ))}
         </Tabs>

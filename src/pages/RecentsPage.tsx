@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { FileGrid } from '@/components/files/FileGrid';
@@ -10,7 +10,8 @@ import {
   FileText, 
   Image as ImageIcon, 
   MoreHorizontal, 
-  Video 
+  Video,
+  Loader2
 } from 'lucide-react';
 import { 
   Select, 
@@ -21,13 +22,74 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { getRecentFiles, searchRecentFiles, filterRecentFiles } from '@/services/recentFilesService';
+import { FileItem } from '@/types/file';
+import { toast } from 'sonner';
 
 const RecentsPage = () => {
-  const [files, setFiles] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [view, setView] = React.useState<'grid' | 'list'>('grid');
-  const [filter, setFilter] = React.useState('all');
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activePeriod, setActivePeriod] = useState<'today' | 'yesterday' | 'week' | 'month'>('today');
+
+  useEffect(() => {
+    loadFiles();
+  }, [activePeriod, filter]);
+
+  const loadFiles = async () => {
+    setLoading(true);
+    try {
+      let fetchedFiles: FileItem[];
+      
+      if (searchQuery) {
+        fetchedFiles = await searchRecentFiles(searchQuery, activePeriod);
+      } else if (filter !== 'all') {
+        fetchedFiles = await filterRecentFiles(filter as any, activePeriod);
+      } else {
+        fetchedFiles = await getRecentFiles(activePeriod);
+      }
+      
+      setFiles(fetchedFiles);
+    } catch (error) {
+      console.error('Error loading recent files:', error);
+      toast.error('Failed to load recent files');
+      setFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    setLoading(true);
+    try {
+      const results = await searchRecentFiles(searchQuery, activePeriod);
+      setFiles(results);
+    } catch (error) {
+      console.error('Error searching files:', error);
+      toast.error('Search failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (value: string) => {
+    setFilter(value);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    if (!e.target.value) {
+      loadFiles();
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
 
   return (
     <AppLayout title="Recent Files">
@@ -41,12 +103,13 @@ const RecentsPage = () => {
                 placeholder="Search recent files..." 
                 className="border-0 bg-transparent focus-visible:ring-0 h-8 p-0"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
               />
             </div>
             <Select
               value={filter}
-              onValueChange={setFilter}
+              onValueChange={handleFilterChange}
             >
               <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="Filter" />
@@ -68,7 +131,12 @@ const RecentsPage = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="today" className="w-full">
+        <Tabs 
+          defaultValue="today" 
+          value={activePeriod} 
+          onValueChange={(value) => setActivePeriod(value as any)}
+          className="w-full"
+        >
           <TabsList>
             <TabsTrigger value="today">Today</TabsTrigger>
             <TabsTrigger value="yesterday">Yesterday</TabsTrigger>
@@ -76,7 +144,7 @@ const RecentsPage = () => {
             <TabsTrigger value="month">This Month</TabsTrigger>
           </TabsList>
           
-          {['today', 'yesterday', 'week', 'month'].map((period) => (
+          {(['today', 'yesterday', 'week', 'month'] as const).map((period) => (
             <TabsContent key={period} value={period} className="mt-0 pt-4">
               {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -114,7 +182,14 @@ const RecentsPage = () => {
         <div className="mt-8">
           <h3 className="text-lg font-medium mb-4">Recent File Types</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Button variant="outline" className="h-auto py-6 flex items-center justify-center">
+            <Button 
+              variant="outline" 
+              className="h-auto py-6 flex items-center justify-center"
+              onClick={() => {
+                setFilter('documents');
+                loadFiles();
+              }}
+            >
               <div className="text-center">
                 <div className="bg-blue-50 text-blue-500 p-3 rounded-full mx-auto mb-3">
                   <FileText className="h-6 w-6" />
@@ -123,7 +198,14 @@ const RecentsPage = () => {
                 <p className="text-muted-foreground text-sm mt-1">View recent documents</p>
               </div>
             </Button>
-            <Button variant="outline" className="h-auto py-6 flex items-center justify-center">
+            <Button 
+              variant="outline" 
+              className="h-auto py-6 flex items-center justify-center"
+              onClick={() => {
+                setFilter('images');
+                loadFiles();
+              }}
+            >
               <div className="text-center">
                 <div className="bg-green-50 text-green-500 p-3 rounded-full mx-auto mb-3">
                   <ImageIcon className="h-6 w-6" />
@@ -132,7 +214,14 @@ const RecentsPage = () => {
                 <p className="text-muted-foreground text-sm mt-1">View recent images</p>
               </div>
             </Button>
-            <Button variant="outline" className="h-auto py-6 flex items-center justify-center">
+            <Button 
+              variant="outline" 
+              className="h-auto py-6 flex items-center justify-center"
+              onClick={() => {
+                setFilter('videos');
+                loadFiles();
+              }}
+            >
               <div className="text-center">
                 <div className="bg-purple-50 text-purple-500 p-3 rounded-full mx-auto mb-3">
                   <Video className="h-6 w-6" />
@@ -141,7 +230,14 @@ const RecentsPage = () => {
                 <p className="text-muted-foreground text-sm mt-1">View recent videos</p>
               </div>
             </Button>
-            <Button variant="outline" className="h-auto py-6 flex items-center justify-center">
+            <Button 
+              variant="outline" 
+              className="h-auto py-6 flex items-center justify-center"
+              onClick={() => {
+                setFilter('all');
+                loadFiles();
+              }}
+            >
               <div className="text-center">
                 <div className="bg-orange-50 text-orange-500 p-3 rounded-full mx-auto mb-3">
                   <CalendarDays className="h-6 w-6" />

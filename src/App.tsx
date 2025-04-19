@@ -14,6 +14,7 @@ import TermsPage from './pages/TermsPage';
 import ContactPage from './pages/ContactPage';
 import SharePage from './pages/SharePage';
 import BlogPage from './pages/BlogPage';
+import BlogPostPage from './pages/BlogPostPage';
 import FeaturesPage from './pages/FeaturesPage';
 import PricingPage from './pages/PricingPage';
 import ApiDocPage from './pages/ApiDocPage';
@@ -47,6 +48,7 @@ function App() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/share/:fileId" element={<SharePage />} />
           <Route path="/blog" element={<BlogPage />} />
+          <Route path="/blog/:slug" element={<BlogPostPage />} />
           <Route path="/features" element={<FeaturesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/api-docs" element={<ApiDocPage />} />
