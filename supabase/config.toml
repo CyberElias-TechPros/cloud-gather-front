@@ -53,3 +53,14 @@ verify_jwt = true
 name = "yandex-disk-auth"
 verify_jwt = true
 
+[[functions]]
+name = "icedrive-auth"
+verify_jwt = true
+
+[[functions]]
+name = "backblaze-auth"
+verify_jwt = true
+
+[[functions]]
+name = "sync-auth"
+verify_jwt = true

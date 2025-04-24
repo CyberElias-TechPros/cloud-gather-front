@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -8,12 +9,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { StorageProviderInfo } from '@/types/file';
 
-// Define the provider type
 type Provider = StorageProviderInfo['type'];
 
 interface ConnectProviderDialogProps {
@@ -23,61 +26,193 @@ interface ConnectProviderDialogProps {
   onSuccess: () => void;
 }
 
-// Define the oauth callback handler on the window object
-declare global {
-  interface Window {
-    handleOAuthCallback: (code: string) => Promise<void>;
-  }
+interface ProviderConfig {
+  name: string;
+  credentialFields: {
+    key: string;
+    label: string;
+    type: 'text' | 'password';
+    helpText: string;
+    required: boolean;
+  }[];
+  setupInstructions: string;
+  docsUrl: string;
 }
+
+const providerConfigs: Record<Provider, ProviderConfig> = {
+  'google-drive': {
+    name: 'Google Drive',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your Google account.',
+    docsUrl: 'https://console.cloud.google.com/apis/credentials'
+  },
+  'dropbox': {
+    name: 'Dropbox',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your Dropbox account.',
+    docsUrl: 'https://www.dropbox.com/developers/apps'
+  },
+  'onedrive': {
+    name: 'OneDrive',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your Microsoft account.',
+    docsUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps'
+  },
+  'box': {
+    name: 'Box',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your Box account.',
+    docsUrl: 'https://app.box.com/developers/console'
+  },
+  'amazon-s3': {
+    name: 'Amazon S3',
+    credentialFields: [
+      {
+        key: 'accessKeyId',
+        label: 'Access Key ID',
+        type: 'text',
+        helpText: 'Your AWS Access Key ID',
+        required: true
+      },
+      {
+        key: 'secretAccessKey',
+        label: 'Secret Access Key',
+        type: 'password',
+        helpText: 'Your AWS Secret Access Key',
+        required: true
+      },
+      {
+        key: 'region',
+        label: 'Region',
+        type: 'text',
+        helpText: 'AWS Region (e.g., us-east-1)',
+        required: true
+      },
+      {
+        key: 'bucket',
+        label: 'Bucket Name',
+        type: 'text',
+        helpText: 'Name of your S3 bucket',
+        required: true
+      }
+    ],
+    setupInstructions: 'Create an IAM user with S3 access and enter the credentials below.',
+    docsUrl: 'https://aws.amazon.com/iam/'
+  },
+  'backblaze': {
+    name: 'Backblaze B2',
+    credentialFields: [
+      {
+        key: 'keyId',
+        label: 'Application Key ID',
+        type: 'text',
+        helpText: 'Your Backblaze Application Key ID',
+        required: true
+      },
+      {
+        key: 'applicationKey',
+        label: 'Application Key',
+        type: 'password',
+        helpText: 'Your Backblaze Application Key',
+        required: true
+      },
+      {
+        key: 'bucket',
+        label: 'Bucket Name',
+        type: 'text',
+        helpText: 'Name of your B2 bucket',
+        required: true
+      }
+    ],
+    setupInstructions: 'Create an application key in your Backblaze B2 account and enter the credentials.',
+    docsUrl: 'https://secure.backblaze.com/app_keys.htm'
+  },
+  'mega': {
+    name: 'MEGA',
+    credentialFields: [
+      {
+        key: 'email',
+        label: 'Email',
+        type: 'text',
+        helpText: 'Your MEGA account email',
+        required: true
+      },
+      {
+        key: 'password',
+        label: 'Password',
+        type: 'password',
+        helpText: 'Your MEGA account password',
+        required: true
+      }
+    ],
+    setupInstructions: 'Enter your MEGA account credentials below.',
+    docsUrl: 'https://mega.io/pro'
+  },
+  'pcloud': {
+    name: 'pCloud',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your pCloud account.',
+    docsUrl: 'https://www.pcloud.com/oauth2/login'
+  },
+  'yandex-disk': {
+    name: 'Yandex Disk',
+    credentialFields: [],
+    setupInstructions: 'Click connect to authenticate with your Yandex account.',
+    docsUrl: 'https://oauth.yandex.com/'
+  },
+  'icedrive': {
+    name: 'Icedrive',
+    credentialFields: [
+      {
+        key: 'apiToken',
+        label: 'API Token',
+        type: 'password',
+        helpText: 'Your Icedrive API token',
+        required: true
+      }
+    ],
+    setupInstructions: 'Generate an API token in your Icedrive account settings and enter it below.',
+    docsUrl: 'https://icedrive.net/account/api'
+  },
+  'sync': {
+    name: 'Sync.com',
+    credentialFields: [
+      {
+        key: 'apiKey',
+        label: 'API Key',
+        type: 'password',
+        helpText: 'Your Sync.com API key',
+        required: true
+      },
+      {
+        key: 'teamId',
+        label: 'Team ID',
+        type: 'text',
+        helpText: 'Your Sync.com Team ID (if applicable)',
+        required: false
+      }
+    ],
+    setupInstructions: 'Generate an API key in your Sync.com account settings and enter it below.',
+    docsUrl: 'https://www.sync.com/help/sync-com-business-api/'
+  },
+  'add': {
+    name: 'Add Provider',
+    credentialFields: [],
+    setupInstructions: '',
+    docsUrl: ''
+  }
+};
 
 export const ConnectProviderDialog = ({
   open,
   onClose,
   provider,
-  onSuccess,
+  onSuccess
 }: ConnectProviderDialogProps) => {
+  const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [isConnecting, setIsConnecting] = useState(false);
-
-  useEffect(() => {
-    // Set up the global callback function
-    window.handleOAuthCallback = async (code: string) => {
-      if (!code) {
-        toast.error('Authentication failed: Could not connect to the provider');
-        return;
-      }
-      
-      try {
-        const { data: session } = await supabase.auth.getSession();
-        
-        if (!session.session) {
-          toast.error('Authentication required: Please sign in to connect a storage provider');
-          return;
-        }
-        
-        // Exchange code for tokens and save the provider
-        const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
-          body: { 
-            code,
-            session: session.session.access_token
-          },
-        });
-        
-        if (error) throw error;
-        
-        toast.success(`Connected to ${formatProviderName(provider)}`);
-        
-        onSuccess();
-      } catch (error: any) {
-        console.error('Error connecting provider:', error);
-        toast.error(`Connection failed: ${error.message || 'Could not complete the connection'}`);
-      }
-    };
-    
-    return () => {
-      // Clean up the global function when the component unmounts
-      delete window.handleOAuthCallback;
-    };
-  }, [provider, onSuccess]);
+  
+  const config = providerConfigs[provider];
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -88,54 +223,34 @@ export const ConnectProviderDialog = ({
         toast.error('Authentication required: Please sign in to connect a storage provider');
         return;
       }
-      
-      // Call the appropriate edge function based on provider
-      const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
-        body: {},
-      });
-      
-      if (error) throw error;
-      
-      // Open the provider's OAuth page
-      const authWindow = window.open(data.url, '_blank', 'width=800,height=600');
-      
-      // The callback is handled by the useEffect above
-      
+
+      // For OAuth providers, initiate the OAuth flow
+      if (['google-drive', 'dropbox', 'onedrive', 'box', 'pcloud', 'yandex-disk'].includes(provider)) {
+        const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
+          body: {},
+        });
+        
+        if (error) throw error;
+        
+        // Open the OAuth window
+        window.open(data.url, '_blank', 'width=800,height=600');
+      } else {
+        // For API key based providers, send credentials directly
+        const { error } = await supabase.functions.invoke(`${provider}-auth`, {
+          body: { credentials },
+        });
+        
+        if (error) throw error;
+        
+        toast.success(`Connected to ${config.name}`);
+        onSuccess();
+      }
     } catch (error: any) {
-      console.error('Error initiating OAuth flow:', error);
-      toast.error(`Connection failed: ${error.message || 'Could not start the connection process'}`);
+      console.error('Error connecting provider:', error);
+      toast.error(`Connection failed: ${error.message || 'Could not complete the connection'}`);
     } finally {
       setIsConnecting(false);
       onClose();
-    }
-  };
-  
-  const formatProviderName = (provider: Provider): string => {
-    switch (provider) {
-      case 'google-drive':
-        return 'Google Drive';
-      case 'dropbox':
-        return 'Dropbox';
-      case 'onedrive':
-        return 'OneDrive';
-      case 'box':
-        return 'Box';
-      case 'amazon-s3':
-        return 'Amazon S3';
-      case 'backblaze':
-        return 'Backblaze';
-      case 'mega':
-        return 'MEGA';
-      case 'pcloud':
-        return 'pCloud';
-      case 'yandex-disk':
-        return 'Yandex Disk';
-      case 'icedrive':
-        return 'Icedrive';
-      case 'sync':
-        return 'Sync.com';
-      default:
-        return 'Provider';
     }
   };
 
@@ -143,60 +258,62 @@ export const ConnectProviderDialog = ({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Connect {formatProviderName(provider)}</DialogTitle>
+          <DialogTitle>Connect {config.name}</DialogTitle>
           <DialogDescription>
-            Connect your {formatProviderName(provider)} account to access and manage your files.
+            {config.setupInstructions}
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex flex-col items-center justify-center py-8">
-          <img 
-            src={`/images/${provider}-logo.png`} 
-            alt={`${formatProviderName(provider)} logo`} 
-            className="h-16 w-16 mb-4" 
-            onError={(e) => {
-              // Fallback to a generic logo if the image doesn't exist
-              e.currentTarget.src = '/images/cloud-logo.png';
-            }}
-          />
-          <p className="text-center mb-4">
-            You'll be redirected to {formatProviderName(provider)} to authorize access to your files.
-          </p>
-          <p className="text-sm text-muted-foreground text-center">
-            Cloud Edifix needs access to list and download your files, but will never modify or delete anything without your permission.
-          </p>
+        <div className="flex flex-col space-y-4 py-4">
+          {config.credentialFields.map((field) => (
+            <div key={field.key} className="space-y-2">
+              <Label htmlFor={field.key}>{field.label}</Label>
+              <Input
+                id={field.key}
+                type={field.type}
+                placeholder={field.label}
+                value={credentials[field.key] || ''}
+                onChange={(e) => setCredentials(prev => ({
+                  ...prev,
+                  [field.key]: e.target.value
+                }))}
+                required={field.required}
+              />
+              <p className="text-sm text-muted-foreground">{field.helpText}</p>
+            </div>
+          ))}
+          
+          {config.docsUrl && (
+            <>
+              <Separator />
+              <p className="text-sm text-muted-foreground">
+                Need help? Check out the{' '}
+                <a 
+                  href={config.docsUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {config.name} documentation
+                </a>
+                {' '}for setup instructions.
+              </p>
+            </>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => {
-            const handleConnect = async () => {
-              try {
-                const { data: session } = await supabase.auth.getSession();
-                if (!session.session) {
-                  toast.error('Authentication required: Please sign in to connect a storage provider');
-                  return;
-                }
-                
-                // Call the appropriate edge function based on provider
-                const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
-                  body: {},
-                });
-                
-                if (error) throw error;
-                
-                // Open the provider's OAuth page
-                window.open(data.url, '_blank', 'width=800,height=600');
-                
-              } catch (error: any) {
-                console.error('Error initiating OAuth flow:', error);
-                toast.error(`Connection failed: ${error.message || 'Could not start the connection process'}`);
-              }
-            };
-            handleConnect();
-            onClose();
-          }}>
-            Connect to {formatProviderName(provider)}
+          <Button 
+            onClick={handleConnect}
+            disabled={isConnecting || (
+              config.credentialFields.some(field => 
+                field.required && !credentials[field.key]
+              )
+            )}
+          >
+            {isConnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Connect to {config.name}
           </Button>
         </DialogFooter>
       </DialogContent>
