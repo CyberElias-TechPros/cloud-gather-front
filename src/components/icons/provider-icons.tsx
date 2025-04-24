@@ -12,7 +12,6 @@ import {
   CloudCog,
   Server,
   CloudOff,
-  Database2
 } from 'lucide-react';
 
 export { 
@@ -21,7 +20,7 @@ export {
   Cloud as OneDriveIcon,
   Box as BoxIcon,
   Database as AmazonS3Icon,
-  Database2 as BackblazeIcon,
+  Database as BackblazeIcon, // Use Database icon for Backblaze
   Link as MegaIcon,
   Cloud as PCloudIcon,
   Database as YandexDiskIcon,

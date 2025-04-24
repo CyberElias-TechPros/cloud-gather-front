@@ -1,6 +1,6 @@
 
 project_id = "mqbtzqgvbhooyzkwfhzy"
-# This is your Supabase project configuration file.
+
 [api.endpoint]
 local = ""
 production = ""
@@ -44,3 +44,12 @@ verify_jwt = true
 [[functions]]
 name = "storage-api"
 verify_jwt = true
+
+[[functions]]
+name = "pcloud-auth"
+verify_jwt = true
+
+[[functions]]
+name = "yandex-disk-auth"
+verify_jwt = true
+
