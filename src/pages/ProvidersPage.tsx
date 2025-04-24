@@ -25,15 +25,11 @@ const ProvidersPage = () => {
   
   const { toast } = useToast();
 
-  // Load providers and storage stats
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        // Load providers
         const providersData = await getStorageProviders();
-        
-        // Transform to UI format
         const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
           id: provider.id,
           name: getProviderDisplayName(provider.provider_name),
@@ -44,10 +40,8 @@ const ProvidersPage = () => {
           status: provider.status as any,
           priority: provider.priority
         }));
-        
         setProviders(formattedProviders);
         
-        // Load storage stats
         const storage = await getStorageUsage();
         setStorageStats({
           totalSpace: storage.totalSpace,
@@ -88,6 +82,7 @@ const ProvidersPage = () => {
   const handleOpenConnect = (providerType: ProviderInfo['type']) => {
     setSelectedProviderType(providerType);
     setConnectDialogOpen(true);
+    return Promise.resolve();
   };
   
   const handleConnect = async (provider: ProviderInfo): Promise<void> => {
@@ -97,13 +92,11 @@ const ProvidersPage = () => {
     }
     
     try {
-      // This would normally trigger the OAuth flow
       toast({
         title: 'Connecting',
         description: `Connecting to ${provider.name}...`,
       });
       
-      // Refresh providers list
       const providersData = await getStorageProviders();
       const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
         id: provider.id,
@@ -139,7 +132,6 @@ const ProvidersPage = () => {
     try {
       await disconnectProvider(provider.id);
       
-      // Update provider in the list
       setProviders(prevProviders => 
         prevProviders.map(p => 
           p.id === provider.id 
@@ -177,11 +169,9 @@ const ProvidersPage = () => {
     const targetProvider = providers[targetIndex];
     
     try {
-      // Swap priorities in the database
       await updateProviderPriority(provider.id, targetProvider.priority!);
       await updateProviderPriority(targetProvider.id, provider.priority!);
       
-      // Update the UI
       const newProviders = [...providers];
       const currentPriority = newProviders[currentIndex].priority!;
       const targetPriority = newProviders[targetIndex].priority!;
@@ -189,7 +179,6 @@ const ProvidersPage = () => {
       newProviders[currentIndex] = { ...newProviders[currentIndex], priority: targetPriority };
       newProviders[targetIndex] = { ...newProviders[targetIndex], priority: currentPriority };
       
-      // Sort by priority
       newProviders.sort((a, b) => (a.priority || 0) - (b.priority || 0));
       
       setProviders(newProviders);
@@ -335,7 +324,6 @@ const ProvidersPage = () => {
         </TabsContent>
       </Tabs>
       
-      {/* Provider Connection Dialog */}
       {selectedProviderType && (
         <ConnectProviderDialog
           open={connectDialogOpen}
@@ -345,7 +333,6 @@ const ProvidersPage = () => {
           }}
           provider={selectedProviderType}
           onSuccess={() => {
-            // Refresh providers list after successful connection
             getStorageProviders().then(providersData => {
               const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
                 id: provider.id,
@@ -364,7 +351,6 @@ const ProvidersPage = () => {
         />
       )}
       
-      {/* Provider Selection Dialog */}
       <Dialog open={connectDialogOpen && !selectedProviderType} onOpenChange={setConnectDialogOpen}>
         <DialogContent>
           <DialogHeader>

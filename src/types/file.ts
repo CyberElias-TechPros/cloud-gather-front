@@ -18,6 +18,7 @@ export interface FileItem {
   // Add these properties for compatibility with components
   isFolder?: boolean;
   type?: string;
+  modified?: string; // Add this for SharePage compatibility
 }
 
 export interface FileShare {
