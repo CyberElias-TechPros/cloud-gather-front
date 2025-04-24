@@ -1,4 +1,19 @@
 
+import {
+  Cloud,
+  Database,
+  Download,
+  HardDrive,
+  Link,
+  Upload,
+  Box,
+  RefreshCw,
+  FileCheck,
+  CloudCog,
+  Server,
+  CloudOff
+} from 'lucide-react';
+
 export { 
   Download as GoogleDriveIcon,
   Upload as DropboxIcon,
@@ -10,5 +25,9 @@ export {
   Cloud as PCloudIcon,
   Database as YandexDiskIcon,
   HardDrive as IcedriveIcon,
-  RefreshCw as SyncIcon
-} from 'lucide-react';
+  RefreshCw as SyncIcon,
+  FileCheck as FileIcon,
+  CloudCog as CloudProviderIcon,
+  Server as StorageIcon,
+  CloudOff as DisconnectedIcon
+};

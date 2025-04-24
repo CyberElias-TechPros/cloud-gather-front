@@ -1,17 +1,21 @@
 
 import React from 'react';
 import { AuthForm } from '@/components/auth/AuthForm';
-import { useSearchParams, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 const AuthPage = () => {
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  
+  const navigate = useNavigate();
+  const location = useLocation();
+
   // If user is already logged in, redirect to dashboard
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  React.useEffect(() => {
+    if (user) {
+      const redirectTo = location.state?.from || '/dashboard';
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, navigate, location]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,19 +17,14 @@ import {
   SyncIcon
 } from '@/components/icons/provider-icons';
 import { ArrowDown, ArrowUp, Cloud, CloudOff, AlertCircle } from 'lucide-react';
+import { StorageProviderInfo } from '@/types/file';
 
-export interface ProviderInfo {
-  id: string;
-  name: string;
-  description: string;
-  status: 'connected' | 'disconnected' | 'error';
-  icon: React.ComponentType<any>;
-}
+export type ProviderInfo = StorageProviderInfo;
 
 export interface ProviderCardProps {
   provider: ProviderInfo;
   onConnect: (provider: ProviderInfo) => Promise<void>;
-  onDisconnect: (provider: ProviderInfo) => Promise<void>;
+  onDisconnect?: (provider: ProviderInfo) => Promise<void>;
   onChangePriority?: (provider: ProviderInfo, direction: 'up' | 'down') => Promise<void>;
 }
 
@@ -51,7 +47,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider, onConnect,
   };
 
   const handleDisconnect = async () => {
-    await onDisconnect(provider);
+    if (onDisconnect) {
+      await onDisconnect(provider);
+    }
   };
 
   const handleChangePriority = async (direction: 'up' | 'down') => {
@@ -60,18 +58,57 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider, onConnect,
     }
   };
 
+  const getProviderIcon = () => {
+    switch (provider.type) {
+      case 'google-drive':
+        return GoogleDriveIcon;
+      case 'dropbox':
+        return DropboxIcon;
+      case 'onedrive':
+        return OneDriveIcon;
+      case 'box':
+        return BoxIcon;
+      case 'amazon-s3':
+        return AmazonS3Icon;
+      case 'backblaze':
+        return BackblazeIcon;
+      case 'mega':
+        return MegaIcon;
+      case 'pcloud':
+        return PCloudIcon;
+      case 'yandex-disk':
+        return YandexDiskIcon;
+      case 'icedrive':
+        return IcedriveIcon;
+      case 'sync':
+        return SyncIcon;
+      default:
+        return Cloud;
+    }
+  };
+
+  const IconComponent = getProviderIcon();
+
   return (
     <Card>
       <CardContent className="flex flex-col p-6">
         <div className="flex items-center mb-4">
-          {React.createElement(provider.icon, { className: "h-6 w-6 mr-2" })}
+          <IconComponent className="h-6 w-6 mr-2" />
           <h3 className="text-lg font-semibold">{provider.name}</h3>
         </div>
-        <p className="text-sm text-muted-foreground mb-4">{provider.description}</p>
-        <div className="flex items-center text-sm text-muted-foreground mb-4">
-          {getStatusIcon()}
-          <span>{provider.status === 'connected' ? 'Connected' : provider.status === 'disconnected' ? 'Disconnected' : 'Error'}</span>
-        </div>
+        <p className="text-sm text-muted-foreground mb-4">{provider.description || ''}</p>
+        {provider.status && (
+          <div className="flex items-center text-sm text-muted-foreground mb-4">
+            {getStatusIcon()}
+            <span>
+              {provider.status === 'connected' 
+                ? 'Connected' 
+                : provider.status === 'disconnected' 
+                  ? 'Disconnected' 
+                  : 'Error'}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between">
           {provider.status === 'connected' ? (
             <Button variant="outline" size="sm" onClick={handleDisconnect}>
@@ -82,7 +119,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider, onConnect,
               Connect
             </Button>
           )}
-          {onChangePriority && (
+          {onChangePriority && provider.status === 'connected' && (
             <div className="flex items-center space-x-2">
               <Button variant="ghost" size="icon" onClick={() => handleChangePriority('up')}>
                 <ArrowUp className="h-4 w-4" />

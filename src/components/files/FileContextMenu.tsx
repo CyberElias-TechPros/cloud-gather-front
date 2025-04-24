@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FileItem } from './FileCard';
+import { FileItem } from '@/types/file';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -59,10 +59,10 @@ export const FileContextMenu = ({
       <ContextMenuContent className="w-64">
         <ContextMenuItem onClick={() => onOpen?.(file)} className="cursor-pointer">
           <Info className="mr-2 h-4 w-4" />
-          {file.isFolder ? 'Open Folder' : 'Open File'}
+          {file.is_folder ? 'Open Folder' : 'Open File'}
         </ContextMenuItem>
         
-        {!file.isFolder && (
+        {!file.is_folder && (
           <ContextMenuItem onClick={() => onDownload?.(file)} className="cursor-pointer">
             <Download className="mr-2 h-4 w-4" />
             Download

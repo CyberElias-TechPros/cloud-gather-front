@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -170,15 +169,34 @@ export const ConnectProviderDialog = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConnect} disabled={isConnecting}>
-            {isConnecting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              `Connect to ${formatProviderName(provider)}`
-            )}
+          <Button onClick={() => {
+            const handleConnect = async () => {
+              try {
+                const { data: session } = await supabase.auth.getSession();
+                if (!session.session) {
+                  toast.error('Authentication required: Please sign in to connect a storage provider');
+                  return;
+                }
+                
+                // Call the appropriate edge function based on provider
+                const { data, error } = await supabase.functions.invoke(`${provider}-auth`, {
+                  body: {},
+                });
+                
+                if (error) throw error;
+                
+                // Open the provider's OAuth page
+                window.open(data.url, '_blank', 'width=800,height=600');
+                
+              } catch (error: any) {
+                console.error('Error initiating OAuth flow:', error);
+                toast.error(`Connection failed: ${error.message || 'Could not start the connection process'}`);
+              }
+            };
+            handleConnect();
+            onClose();
+          }}>
+            Connect to {formatProviderName(provider)}
           </Button>
         </DialogFooter>
       </DialogContent>

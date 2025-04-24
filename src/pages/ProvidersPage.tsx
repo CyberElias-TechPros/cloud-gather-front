@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ProviderCard, ProviderInfo } from '@/components/providers/ProviderCard';
@@ -22,7 +21,7 @@ const ProvidersPage = () => {
   }>({ totalSpace: 0, usedSpace: 0 });
   
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-  const [selectedProviderType, setSelectedProviderType] = useState<'google-drive' | 'dropbox' | 'onedrive' | null>(null);
+  const [selectedProviderType, setSelectedProviderType] = useState<ProviderInfo['type'] | null>(null);
   
   const { toast } = useToast();
 
@@ -35,10 +34,11 @@ const ProvidersPage = () => {
         const providersData = await getStorageProviders();
         
         // Transform to UI format
-        const formattedProviders = providersData.map(provider => ({
+        const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
           id: provider.id,
           name: getProviderDisplayName(provider.provider_name),
-          type: provider.provider_name as any,
+          type: provider.provider_name,
+          description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
           totalSpace: provider.total_space || 0,
           usedSpace: provider.used_space || 0,
           status: provider.status as any,
@@ -73,19 +73,27 @@ const ProvidersPage = () => {
       case 'google-drive': return 'Google Drive';
       case 'dropbox': return 'Dropbox';
       case 'onedrive': return 'OneDrive';
+      case 'box': return 'Box';
+      case 'amazon-s3': return 'Amazon S3';
+      case 'backblaze': return 'Backblaze';
+      case 'mega': return 'MEGA';
+      case 'pcloud': return 'pCloud';
+      case 'yandex-disk': return 'Yandex Disk';
+      case 'icedrive': return 'Icedrive';
+      case 'sync': return 'Sync.com';
       default: return type;
     }
   };
   
-  const handleOpenConnect = (providerType: 'google-drive' | 'dropbox' | 'onedrive') => {
+  const handleOpenConnect = (providerType: ProviderInfo['type']) => {
     setSelectedProviderType(providerType);
     setConnectDialogOpen(true);
   };
   
-  const handleConnect = async (provider: ProviderInfo) => {
+  const handleConnect = async (provider: ProviderInfo): Promise<void> => {
     if (provider.type === 'add') {
       setConnectDialogOpen(true);
-      return;
+      return Promise.resolve();
     }
     
     try {
@@ -97,10 +105,11 @@ const ProvidersPage = () => {
       
       // Refresh providers list
       const providersData = await getStorageProviders();
-      const formattedProviders = providersData.map(provider => ({
+      const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
         id: provider.id,
         name: getProviderDisplayName(provider.provider_name),
-        type: provider.provider_name as any,
+        type: provider.provider_name,
+        description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
         totalSpace: provider.total_space || 0,
         usedSpace: provider.used_space || 0,
         status: provider.status as any,
@@ -113,6 +122,8 @@ const ProvidersPage = () => {
         title: 'Connected',
         description: `${provider.name} connected successfully`,
       });
+      
+      return Promise.resolve();
     } catch (error) {
       console.error('Error connecting provider:', error);
       toast({
@@ -120,10 +131,11 @@ const ProvidersPage = () => {
         description: 'Failed to connect storage provider',
         variant: 'destructive',
       });
+      return Promise.reject(error);
     }
   };
   
-  const handleDisconnect = async (provider: ProviderInfo) => {
+  const handleDisconnect = async (provider: ProviderInfo): Promise<void> => {
     try {
       await disconnectProvider(provider.id);
       
@@ -140,6 +152,8 @@ const ProvidersPage = () => {
         title: 'Disconnected',
         description: `${provider.name} has been disconnected`,
       });
+      
+      return Promise.resolve();
     } catch (error) {
       console.error('Error disconnecting provider:', error);
       toast({
@@ -147,15 +161,16 @@ const ProvidersPage = () => {
         description: 'Failed to disconnect provider',
         variant: 'destructive',
       });
+      return Promise.reject(error);
     }
   };
   
-  const handleChangePriority = async (provider: ProviderInfo, direction: 'up' | 'down') => {
+  const handleChangePriority = async (provider: ProviderInfo, direction: 'up' | 'down'): Promise<void> => {
     const currentIndex = providers.findIndex(p => p.id === provider.id);
     
     if ((direction === 'up' && currentIndex <= 0) || 
         (direction === 'down' && currentIndex >= providers.length - 1)) {
-      return;
+      return Promise.resolve();
     }
     
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
@@ -183,6 +198,8 @@ const ProvidersPage = () => {
         title: 'Priority updated',
         description: `${provider.name} priority has been updated`,
       });
+      
+      return Promise.resolve();
     } catch (error) {
       console.error('Error updating priority:', error);
       toast({
@@ -190,6 +207,7 @@ const ProvidersPage = () => {
         description: 'Failed to update provider priority',
         variant: 'destructive',
       });
+      return Promise.reject(error);
     }
   };
   
@@ -329,10 +347,11 @@ const ProvidersPage = () => {
           onSuccess={() => {
             // Refresh providers list after successful connection
             getStorageProviders().then(providersData => {
-              const formattedProviders = providersData.map(provider => ({
+              const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
                 id: provider.id,
                 name: getProviderDisplayName(provider.provider_name),
-                type: provider.provider_name as any,
+                type: provider.provider_name,
+                description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
                 totalSpace: provider.total_space || 0,
                 usedSpace: provider.used_space || 0,
                 status: provider.status as any,
@@ -358,7 +377,7 @@ const ProvidersPage = () => {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Select 
-                onValueChange={(value: 'google-drive' | 'dropbox' | 'onedrive') => handleOpenConnect(value)}
+                onValueChange={(value: ProviderInfo['type']) => handleOpenConnect(value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select provider" />
@@ -367,6 +386,14 @@ const ProvidersPage = () => {
                   <SelectItem value="google-drive">Google Drive</SelectItem>
                   <SelectItem value="dropbox">Dropbox</SelectItem>
                   <SelectItem value="onedrive">OneDrive</SelectItem>
+                  <SelectItem value="box">Box</SelectItem>
+                  <SelectItem value="amazon-s3">Amazon S3</SelectItem>
+                  <SelectItem value="backblaze">Backblaze</SelectItem>
+                  <SelectItem value="mega">MEGA</SelectItem>
+                  <SelectItem value="pcloud">pCloud</SelectItem>
+                  <SelectItem value="yandex-disk">Yandex Disk</SelectItem>
+                  <SelectItem value="icedrive">Icedrive</SelectItem>
+                  <SelectItem value="sync">Sync.com</SelectItem>
                 </SelectContent>
               </Select>
             </div>

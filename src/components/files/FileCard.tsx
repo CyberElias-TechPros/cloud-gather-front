@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,7 +103,7 @@ export const FileCard = ({
       >
         <Card className="hover:border-primary/50 transition-colors cursor-pointer">
           <CardContent className="p-4">
-            <div className="flex flex-col items-center" onClick={handleFileClick}>
+            <div className="flex flex-col items-center" onClick={() => onOpen?.(file)}>
               <div className="bg-muted rounded-md p-4 mb-3">
                 {getFileIcon()}
               </div>
@@ -113,7 +112,7 @@ export const FileCard = ({
                   {file.filename}
                 </div>
                 <div className="text-muted-foreground text-xs">
-                  {getFileSize()}
+                  {formatBytes(file.size)}
                 </div>
               </div>
             </div>
@@ -166,7 +165,7 @@ export const FileCard = ({
     >
       <div 
         className="flex items-center px-4 py-3 hover:bg-muted/50 cursor-pointer"
-        onClick={handleFileClick}
+        onClick={() => onOpen?.(file)}
       >
         <div className="flex flex-1 items-center">
           <div className="mr-2">
@@ -177,7 +176,7 @@ export const FileCard = ({
               {file.filename}
             </div>
             <div className="text-xs text-muted-foreground">
-              {getModifiedDate()} • {getFileSize()}
+              {formatDistanceToNow(new Date(file.updated_at), { addSuffix: true })} • {formatBytes(file.size)}
             </div>
           </div>
         </div>

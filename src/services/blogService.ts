@@ -30,7 +30,7 @@ export const fetchBlogPosts = async (): Promise<BlogPost[]> => {
     return data.map(post => ({
       ...post,
       date: new Date(post.date),
-      tags: Array.isArray(post.tags) ? post.tags : JSON.parse(post.tags || '[]')
+      tags: Array.isArray(post.tags) ? post.tags : JSON.parse(String(post.tags || '[]'))
     }));
   } catch (error) {
     console.error('Failed to fetch blog posts:', error);
@@ -56,7 +56,7 @@ export const fetchBlogPostBySlug = async (slug: string): Promise<BlogPost | null
     return {
       ...data,
       date: new Date(data.date),
-      tags: Array.isArray(data.tags) ? data.tags : JSON.parse(data.tags || '[]')
+      tags: Array.isArray(data.tags) ? data.tags : JSON.parse(String(data.tags || '[]'))
     };
   } catch (error) {
     console.error(`Failed to fetch blog post with slug ${slug}:`, error);
@@ -80,7 +80,7 @@ export const fetchBlogPostsByCategory = async (category: string): Promise<BlogPo
     return data.map(post => ({
       ...post,
       date: new Date(post.date),
-      tags: Array.isArray(post.tags) ? post.tags : JSON.parse(post.tags || '[]')
+      tags: Array.isArray(post.tags) ? post.tags : JSON.parse(String(post.tags || '[]'))
     }));
   } catch (error) {
     console.error(`Failed to fetch blog posts in category ${category}:`, error);
