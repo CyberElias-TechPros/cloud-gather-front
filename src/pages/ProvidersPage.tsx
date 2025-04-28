@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Loader2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -62,24 +62,7 @@ const ProvidersPage = () => {
     loadData();
   }, [toast]);
 
-  const getProviderDisplayName = (type: string): string => {
-    switch (type) {
-      case 'google-drive': return 'Google Drive';
-      case 'dropbox': return 'Dropbox';
-      case 'onedrive': return 'OneDrive';
-      case 'box': return 'Box';
-      case 'amazon-s3': return 'Amazon S3';
-      case 'backblaze': return 'Backblaze';
-      case 'mega': return 'MEGA';
-      case 'pcloud': return 'pCloud';
-      case 'yandex-disk': return 'Yandex Disk';
-      case 'icedrive': return 'Icedrive';
-      case 'sync': return 'Sync.com';
-      default: return type;
-    }
-  };
-  
-  const handleOpenConnect = (providerType: ProviderInfo['type']) => {
+  const handleOpenConnect = (providerType: ProviderInfo['type']): Promise<void> => {
     setSelectedProviderType(providerType);
     setConnectDialogOpen(true);
     return Promise.resolve();
@@ -231,7 +214,10 @@ const ProvidersPage = () => {
         
         <ProviderCard 
           provider={{ id: 'add', name: 'Add Provider', type: 'add' }}
-          onConnect={() => setConnectDialogOpen(true)}
+          onConnect={() => {
+            setConnectDialogOpen(true);
+            return Promise.resolve();
+          }}
         />
       </div>
     );

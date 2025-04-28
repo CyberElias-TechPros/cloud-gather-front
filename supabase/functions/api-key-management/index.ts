@@ -1,7 +1,6 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { randomString } from 'https://deno.land/x/random_string@v1.0.0/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +9,17 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
+
+// Function to generate a random string instead of using the external module
+function generateRandomString(length: number): string {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  const charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -72,7 +82,7 @@ serve(async (req) => {
       }
       
       // Generate a random API key with prefix
-      const apiKey = `ku_${randomString({ length: 32 })}`;
+      const apiKey = `ku_${generateRandomString(32)}`;
       
       const { data, error } = await supabase
         .from('api_keys')

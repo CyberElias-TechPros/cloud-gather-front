@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -88,7 +87,6 @@ export const FileCard = ({
     }
   };
 
-  // Grid view
   if (view === 'grid') {
     return (
       <FileContextMenu
@@ -151,7 +149,6 @@ export const FileCard = ({
     );
   }
 
-  // List view
   return (
     <FileContextMenu
       file={file}
@@ -177,7 +174,7 @@ export const FileCard = ({
               {file.filename}
             </div>
             <div className="text-xs text-muted-foreground">
-              {formatDistanceToNow(new Date(file.updated_at), { addSuffix: true })} • {formatBytes(file.size)}
+              {getModifiedDate()} • {getFileSize()}
             </div>
           </div>
         </div>
