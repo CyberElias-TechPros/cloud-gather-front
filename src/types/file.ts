@@ -1,3 +1,4 @@
+
 export interface FileItem {
   id: string;
   filename: string;
@@ -18,6 +19,7 @@ export interface FileItem {
   isFolder?: boolean;
   type?: string;
   modified?: string;
+  provider?: string;
 }
 
 export interface FileShare {
@@ -42,4 +44,16 @@ export interface StorageProviderInfo {
   freeStorageSize?: string;
   icon?: string;
   priority?: number;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  user_id: string;
+  permissions: string[];
+  created_at: string;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+  status: 'active' | 'expired' | 'revoked';
 }

@@ -1,6 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { randomString } from 'https://deno.land/x/random_string@v1.0.0/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,166 +10,152 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Get auth token from the request
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Create Supabase client
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new Error('No session found');
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Create Supabase client with the user's token
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
-    
-    // Verify the token by getting the user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const url = new URL(req.url);
+    const path = url.pathname.split('/').pop();
+    const userId = session.user.id;
+
+    // Check if the API key table exists, create if not
+    const apiKeyTableExists = await checkApiKeyTable(supabase);
+    if (!apiKeyTableExists) {
+      await createApiKeyTable(supabase);
     }
+
+    if (req.method === 'GET') {
+      // List API keys
+      const { data: keys, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Remove sensitive information before sending
+      const safeKeys = keys.map(key => ({
+        ...key,
+        key: key.key.slice(0, 8) + '...' + key.key.slice(-4)
+      }));
+      
+      return new Response(
+        JSON.stringify({ keys: safeKeys }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
+    } 
     
-    // Handle different request methods
-    if (req.method === 'POST') {
-      // Create a new API key
+    else if (req.method === 'POST') {
       const { name, permissions, expiresAt } = await req.json();
       
       if (!name) {
-        return new Response(
-          JSON.stringify({ error: 'Missing required fields' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        throw new Error('API key name is required');
       }
       
-      // Generate a random API key
-      const apiKey = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-      
-      // Create the API key record
-      const { data, error } = await supabase.from('api_keys').insert({
-        user_id: user.id,
-        name,
-        key: apiKey,
-        permissions: permissions || ['read'],
-        expires_at: expiresAt || null,
-        status: 'active'
-      }).select();
-      
-      if (error) {
-        console.error('Error creating API key:', error);
-        throw error;
+      if (!permissions || !Array.isArray(permissions) || permissions.length === 0) {
+        throw new Error('At least one permission is required');
       }
       
-      return new Response(
-        JSON.stringify({ data: data[0] }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Generate a random API key with prefix
+      const apiKey = `ku_${randomString({ length: 32 })}`;
       
-    } else if (req.method === 'GET') {
-      // Get all API keys for the user
       const { data, error } = await supabase
         .from('api_keys')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-        
-      if (error) {
-        console.error('Error fetching API keys:', error);
-        throw error;
-      }
+        .insert({
+          name,
+          key: apiKey,
+          user_id: userId,
+          permissions,
+          expires_at: expiresAt,
+          status: 'active'
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
       
       return new Response(
-        JSON.stringify({ data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          apiKey: {
+            ...data,
+            key: apiKey // Return the full key only once
+          }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 201
+        }
       );
+    } 
+    
+    else if (req.method === 'DELETE' && path) {
+      const keyId = path;
       
-    } else if (req.method === 'PATCH') {
-      const { id, status } = await req.json();
-      
-      if (!id || !status) {
-        return new Response(
-          JSON.stringify({ error: 'Missing required fields' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Update the API key status
-      const { data, error } = await supabase
-        .from('api_keys')
-        .update({ status })
-        .eq('id', id)
-        .eq('user_id', user.id) // Ensure the user owns this key
-        .select();
-        
-      if (error) {
-        console.error('Error updating API key:', error);
-        throw error;
-      }
-      
-      return new Response(
-        JSON.stringify({ data: data[0] }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-      
-    } else if (req.method === 'DELETE') {
-      const { id } = await req.json();
-      
-      if (!id) {
-        return new Response(
-          JSON.stringify({ error: 'Missing API key ID' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Delete the API key
       const { error } = await supabase
         .from('api_keys')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id); // Ensure the user owns this key
-        
-      if (error) {
-        console.error('Error deleting API key:', error);
-        throw error;
-      }
+        .update({ status: 'revoked' })
+        .eq('id', keyId)
+        .eq('user_id', userId);
+      
+      if (error) throw error;
       
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
       );
     }
     
-    // If we get here, it's an unsupported method
     return new Response(
       JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 405
+      }
     );
     
   } catch (error) {
-    console.error('Error in API key management:', error);
+    console.error('API Key Management Error:', error);
     
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      }
     );
   }
 });
+
+async function checkApiKeyTable(supabase: any): Promise<boolean> {
+  try {
+    // Try to query the api_keys table
+    const { error } = await supabase.from('api_keys').select('id').limit(1);
+    return !error;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function createApiKeyTable(supabase: any): Promise<void> {
+  // Create the api_keys table using raw SQL
+  const { error } = await supabase.rpc('create_api_keys_table');
+  if (error) throw error;
+}

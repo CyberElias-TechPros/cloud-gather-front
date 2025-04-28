@@ -64,3 +64,4 @@ verify_jwt = true
 [[functions]]
 name = "sync-auth"
 verify_jwt = true
+

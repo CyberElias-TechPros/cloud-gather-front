@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Key, Plus, ArrowRight, Trash2, Loader2 } from 'lucide-react';
+import { Copy, Key, Plus, ArrowRight, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -31,45 +31,60 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
-
-interface APIKey {
-  id: string;
-  name: string;
-  key: string;
-  created: string;
-  lastUsed: string | null;
-  permissions: string[];
-}
+import { ApiKey } from '@/types/file';
+import { supabase } from '@/integrations/supabase/client';
+import { formatDistanceToNow } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export const APISettings = () => {
-  const [apiKeys, setApiKeys] = useState<APIKey[]>([
-    {
-      id: '1',
-      name: 'Web App Integration',
-      key: 'cu_BhJ8nKpLmQrStU',
-      created: '2023-05-15T10:30:00Z',
-      lastUsed: '2023-06-01T08:45:33Z',
-      permissions: ['read', 'write', 'delete']
-    },
-    {
-      id: '2',
-      name: 'Mobile App',
-      key: 'cu_VwXyZa1B2C3D4E',
-      created: '2023-05-20T14:22:00Z',
-      lastUsed: '2023-05-31T19:12:05Z',
-      permissions: ['read', 'write']
-    }
-  ]);
-  
-  const [newApiKey, setNewApiKey] = useState('');
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(['read']);
   const [isCreatingKey, setIsCreatingKey] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [creatingKey, setCreatingKey] = useState(false);
   const [allowExternalAccess, setAllowExternalAccess] = useState(true);
   const [webhook, setWebhook] = useState('');
   const { toast } = useToast();
+
+  useEffect(() => {
+    loadApiKeys();
+  }, []);
+
+  const loadApiKeys = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: 'Not authenticated',
+          description: 'Please sign in to manage API keys',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('api-key-management', {
+        method: 'GET',
+      });
+
+      if (error) throw error;
+
+      setApiKeys(data.keys || []);
+    } catch (error: any) {
+      console.error('Failed to load API keys:', error);
+      toast({
+        title: 'Error loading API keys',
+        description: error.message || 'An error occurred while loading API keys',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const generateApiKey = async () => {
     if (!newKeyName.trim()) {
@@ -80,26 +95,32 @@ export const APISettings = () => {
       });
       return;
     }
+
+    if (selectedPermissions.length === 0) {
+      toast({
+        title: 'Permissions required',
+        description: 'Please select at least one permission',
+        variant: 'destructive',
+      });
+      return;
+    }
     
-    setLoading(true);
+    setCreatingKey(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data, error } = await supabase.functions.invoke('api-key-management', {
+        method: 'POST',
+        body: {
+          name: newKeyName,
+          permissions: selectedPermissions,
+          expiresAt: null // No expiration for now
+        }
+      });
       
-      const generatedKey = `cu_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
+      if (error) throw error;
       
-      const newKey = {
-        id: Date.now().toString(),
-        name: newKeyName,
-        key: generatedKey,
-        created: new Date().toISOString(),
-        lastUsed: null,
-        permissions: ['read', 'write']
-      };
-      
-      setApiKeys([...apiKeys, newKey]);
-      setNewApiKey(generatedKey);
+      setNewApiKey(data.apiKey.key);
+      loadApiKeys(); // Refresh the list
       
       toast({
         title: 'API key created',
@@ -107,21 +128,27 @@ export const APISettings = () => {
       });
       
       setNewKeyName('');
-    } catch (error) {
+      setSelectedPermissions(['read']);
+    } catch (error: any) {
+      console.error('Error creating API key:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create API key.',
+        description: error.message || 'Failed to create API key',
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      setCreatingKey(false);
     }
   };
   
   const revokeApiKey = async (id: string) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const { error } = await supabase.functions.invoke('api-key-management', {
+        method: 'DELETE',
+        body: { id }
+      });
+      
+      if (error) throw error;
       
       setApiKeys(apiKeys.filter(key => key.id !== id));
       
@@ -129,10 +156,10 @@ export const APISettings = () => {
         title: 'API key revoked',
         description: 'The API key has been revoked successfully.',
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to revoke API key.',
+        description: error.message || 'Failed to revoke API key',
         variant: 'destructive',
       });
     }
@@ -153,6 +180,15 @@ export const APISettings = () => {
     });
   };
 
+  // Toggle a permission in the selected permissions array
+  const togglePermission = (permission: string) => {
+    if (selectedPermissions.includes(permission)) {
+      setSelectedPermissions(selectedPermissions.filter(p => p !== permission));
+    } else {
+      setSelectedPermissions([...selectedPermissions, permission]);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -167,7 +203,12 @@ export const APISettings = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col space-y-4">
-            {apiKeys.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+                <span>Loading API keys...</span>
+              </div>
+            ) : apiKeys.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -185,7 +226,7 @@ export const APISettings = () => {
                       <TableCell className="font-medium">{key.name}</TableCell>
                       <TableCell>
                         <div className="flex items-center">
-                          <span className="font-mono">•••••••••••{key.key.slice(-4)}</span>
+                          <span className="font-mono">{key.key}</span>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -196,8 +237,8 @@ export const APISettings = () => {
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(key.created).toLocaleDateString()}</TableCell>
-                      <TableCell>{key.lastUsed ? new Date(key.lastUsed).toLocaleDateString() : 'Never'}</TableCell>
+                      <TableCell>{formatDistanceToNow(new Date(key.created_at), { addSuffix: true })}</TableCell>
+                      <TableCell>{key.last_used_at ? formatDistanceToNow(new Date(key.last_used_at), { addSuffix: true }) : 'Never'}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {key.permissions.map((permission) => (
@@ -230,12 +271,10 @@ export const APISettings = () => {
           </div>
           
           <Dialog open={isCreatingKey} onOpenChange={setIsCreatingKey}>
-            <DialogTrigger asChild>
-              <Button className="mt-4">
-                <Plus className="h-4 w-4 mr-2" />
-                Create API Key
-              </Button>
-            </DialogTrigger>
+            <Button onClick={() => setIsCreatingKey(true)} className="mt-4">
+              <Plus className="h-4 w-4 mr-2" />
+              Create API Key
+            </Button>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New API Key</DialogTitle>
@@ -258,6 +297,44 @@ export const APISettings = () => {
                   </p>
                 </div>
                 
+                <div className="space-y-2">
+                  <Label>Permissions</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="permission-read" 
+                        checked={selectedPermissions.includes('read')} 
+                        onCheckedChange={() => togglePermission('read')}
+                      />
+                      <Label htmlFor="permission-read">Read</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="permission-write" 
+                        checked={selectedPermissions.includes('write')} 
+                        onCheckedChange={() => togglePermission('write')}
+                      />
+                      <Label htmlFor="permission-write">Write</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="permission-delete" 
+                        checked={selectedPermissions.includes('delete')} 
+                        onCheckedChange={() => togglePermission('delete')}
+                      />
+                      <Label htmlFor="permission-delete">Delete</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="permission-admin" 
+                        checked={selectedPermissions.includes('admin')} 
+                        onCheckedChange={() => togglePermission('admin')}
+                      />
+                      <Label htmlFor="permission-admin">Admin</Label>
+                    </div>
+                  </div>
+                </div>
+                
                 {newApiKey && (
                   <div className="space-y-2 mt-4">
                     <Label>Your New API Key</Label>
@@ -271,20 +348,28 @@ export const APISettings = () => {
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-sm text-amber-500 font-medium">
-                      Save this key now! You won't be able to see it again.
-                    </p>
+                    <div className="flex items-center mt-2 p-2 bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 rounded-md">
+                      <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <p className="text-sm font-medium">
+                        Save this key now! You won't be able to see it again.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
               
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreatingKey(false)}>
+                <Button variant="outline" onClick={() => {
+                  setIsCreatingKey(false);
+                  setNewApiKey(null);
+                  setNewKeyName('');
+                  setSelectedPermissions(['read']);
+                }}>
                   {newApiKey ? 'Close' : 'Cancel'}
                 </Button>
                 {!newApiKey && (
-                  <Button onClick={generateApiKey} disabled={loading}>
-                    {loading ? (
+                  <Button onClick={generateApiKey} disabled={creatingKey || !newKeyName.trim() || selectedPermissions.length === 0}>
+                    {creatingKey ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Generating...

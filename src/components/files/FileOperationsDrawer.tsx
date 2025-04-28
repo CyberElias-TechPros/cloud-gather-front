@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileItem } from './FileCard';
+import { FileItem } from '@/types/file';
 import { formatDistanceToNow } from 'date-fns';
 import { Check, Share2, FileText, Pencil } from 'lucide-react';
 
@@ -182,7 +182,7 @@ export const FileOperationsDrawer = ({
                   {file.provider_id && (
                     <>
                       <div className="text-sm font-medium">Provider:</div>
-                      <div className="text-sm">{file.provider || 'Local Storage'}</div>
+                      <div className="text-sm">{file.provider || 'External Storage'}</div>
                     </>
                   )}
                   

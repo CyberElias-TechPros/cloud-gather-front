@@ -12,6 +12,10 @@ import {
   CloudCog,
   Server,
   CloudOff,
+  Lock,
+  CloudLightning,
+  Waves,
+  CloudSnow
 } from 'lucide-react';
 
 export { 
@@ -20,14 +24,15 @@ export {
   Cloud as OneDriveIcon,
   Box as BoxIcon,
   Database as AmazonS3Icon,
-  Database as BackblazeIcon, // Use Database icon for Backblaze
+  Server as BackblazeIcon,
   Link as MegaIcon,
-  Cloud as PCloudIcon,
-  Database as YandexDiskIcon,
-  HardDrive as IcedriveIcon,
+  CloudLightning as PCloudIcon,
+  Waves as YandexDiskIcon,
+  CloudSnow as IcedriveIcon,
   RefreshCw as SyncIcon,
   FileCheck as FileIcon,
   CloudCog as CloudProviderIcon,
   Server as StorageIcon,
-  CloudOff as DisconnectedIcon
+  CloudOff as DisconnectedIcon,
+  Lock as EncryptedIcon
 };
