@@ -9,6 +9,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import RegisterPage from "./pages/RegisterPage";
 import APIDocs from "./pages/APIDocs";
+import RecentsPage from "./pages/RecentsPage";
 
 const router = createBrowserRouter([
   {
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
   {
     path: "/api-docs",
     element: <APIDocs />,
+  },
+  {
+    path: "/recents",
+    element: <RecentsPage />,
   },
 ]);
 
