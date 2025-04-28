@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ProviderCard, ProviderInfo } from '@/components/providers/ProviderCard';
@@ -11,6 +12,26 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ConnectProviderDialog } from '@/components/providers/ConnectProviderDialog';
 import { getStorageProviders, disconnectProvider, updateProviderPriority, getStorageUsage } from '@/services/cloudProviders';
+
+// Add this function to format provider names for display
+const getProviderDisplayName = (providerName: string): string => {
+  const nameMap: Record<string, string> = {
+    'google-drive': 'Google Drive',
+    'dropbox': 'Dropbox',
+    'onedrive': 'OneDrive',
+    'box': 'Box',
+    'amazon-s3': 'Amazon S3',
+    'backblaze': 'Backblaze B2',
+    'mega': 'MEGA',
+    'pcloud': 'pCloud',
+    'yandex-disk': 'Yandex Disk',
+    'icedrive': 'Icedrive',
+    'sync': 'Sync.com',
+    'add': 'Add Provider'
+  };
+  
+  return nameMap[providerName] || providerName.charAt(0).toUpperCase() + providerName.slice(1);
+};
 
 const ProvidersPage = () => {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);

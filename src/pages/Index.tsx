@@ -6,7 +6,7 @@ import { ActivityFeed, ActivityItem } from '@/components/dashboard/ActivityFeed'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { FileGrid } from '@/components/files/FileGrid';
-import { FileItem } from '@/components/files/FileCard';
+import { FileItem } from '@/types/file'; // Updated import
 import { UploadDropzone } from '@/components/uploads/UploadDropzone';
 import { UploadProgress, UploadItem } from '@/components/uploads/UploadProgress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
