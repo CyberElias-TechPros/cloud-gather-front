@@ -781,7 +781,7 @@ const SettingsPage = () => {
         <TabsContent value="storage" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Storage Preferences</Car-dTitle>
+              <CardTitle>Storage Preferences</CardTitle>
               <CardDescription>
                 Manage how your files are stored across providers
               </CardDescription>
