@@ -5,35 +5,19 @@ import { ProviderCard, ProviderInfo } from '@/components/providers/ProviderCard'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PlusCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Loader2, Settings, Cloud, CloudOff } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { ConnectProviderDialog } from '@/components/providers/ConnectProviderDialog';
 import { getStorageProviders, disconnectProvider, updateProviderPriority, getStorageUsage } from '@/services/cloudProviders';
-
-// Add this function to format provider names for display
-const getProviderDisplayName = (providerName: string): string => {
-  const nameMap: Record<string, string> = {
-    'google-drive': 'Google Drive',
-    'dropbox': 'Dropbox',
-    'onedrive': 'OneDrive',
-    'box': 'Box',
-    'amazon-s3': 'Amazon S3',
-    'backblaze': 'Backblaze B2',
-    'mega': 'MEGA',
-    'pcloud': 'pCloud',
-    'yandex-disk': 'Yandex Disk',
-    'icedrive': 'Icedrive',
-    'sync': 'Sync.com',
-    'add': 'Add Provider'
-  };
-  
-  return nameMap[providerName] || providerName.charAt(0).toUpperCase() + providerName.slice(1);
-};
+import { getProviderDisplayName } from '@/types/file';
+import { useAuth } from '@/contexts/AuthContext';
+import { Progress } from '@/components/ui/progress';
 
 const ProvidersPage = () => {
+  const { user, session } = useAuth();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [storageStats, setStorageStats] = useState<{
@@ -44,17 +28,17 @@ const ProvidersPage = () => {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [selectedProviderType, setSelectedProviderType] = useState<ProviderInfo['type'] | null>(null);
   
-  const { toast } = useToast();
-
   useEffect(() => {
     const loadData = async () => {
+      if (!user) return;
+      
       setLoading(true);
       try {
         const providersData = await getStorageProviders();
         const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
           id: provider.id,
           name: getProviderDisplayName(provider.provider_name),
-          type: provider.provider_name,
+          type: provider.provider_name as any,
           description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
           totalSpace: provider.total_space || 0,
           usedSpace: provider.used_space || 0,
@@ -68,25 +52,20 @@ const ProvidersPage = () => {
           totalSpace: storage.totalSpace,
           usedSpace: storage.usedSpace
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error loading providers:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load storage providers',
-          variant: 'destructive',
-        });
+        toast.error(`Failed to load storage providers: ${error.message}`);
       } finally {
         setLoading(false);
       }
     };
     
     loadData();
-  }, [toast]);
+  }, [user]);
 
-  const handleOpenConnect = (providerType: ProviderInfo['type']): Promise<void> => {
+  const handleOpenConnect = (providerType: ProviderInfo['type']) => {
     setSelectedProviderType(providerType);
     setConnectDialogOpen(true);
-    return Promise.resolve();
   };
   
   const handleConnect = async (provider: ProviderInfo): Promise<void> => {
@@ -96,16 +75,14 @@ const ProvidersPage = () => {
     }
     
     try {
-      toast({
-        title: 'Connecting',
-        description: `Connecting to ${provider.name}...`,
-      });
+      toast.loading(`Connecting to ${provider.name}...`);
       
+      // After connection is successful
       const providersData = await getStorageProviders();
       const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
         id: provider.id,
         name: getProviderDisplayName(provider.provider_name),
-        type: provider.provider_name,
+        type: provider.provider_name as any,
         description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
         totalSpace: provider.total_space || 0,
         usedSpace: provider.used_space || 0,
@@ -115,25 +92,18 @@ const ProvidersPage = () => {
       
       setProviders(formattedProviders);
       
-      toast({
-        title: 'Connected',
-        description: `${provider.name} connected successfully`,
-      });
-      
+      toast.success(`${provider.name} connected successfully`);
       return Promise.resolve();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error connecting provider:', error);
-      toast({
-        title: 'Connection failed',
-        description: 'Failed to connect storage provider',
-        variant: 'destructive',
-      });
+      toast.error(`Failed to connect ${provider.name}: ${error.message}`);
       return Promise.reject(error);
     }
   };
   
   const handleDisconnect = async (provider: ProviderInfo): Promise<void> => {
     try {
+      toast.loading(`Disconnecting ${provider.name}...`);
       await disconnectProvider(provider.id);
       
       setProviders(prevProviders => 
@@ -144,19 +114,11 @@ const ProvidersPage = () => {
         )
       );
       
-      toast({
-        title: 'Disconnected',
-        description: `${provider.name} has been disconnected`,
-      });
-      
+      toast.success(`${provider.name} has been disconnected`);
       return Promise.resolve();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error disconnecting provider:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to disconnect provider',
-        variant: 'destructive',
-      });
+      toast.error(`Failed to disconnect ${provider.name}: ${error.message}`);
       return Promise.reject(error);
     }
   };
@@ -176,231 +138,324 @@ const ProvidersPage = () => {
       await updateProviderPriority(provider.id, targetProvider.priority!);
       await updateProviderPriority(targetProvider.id, provider.priority!);
       
-      const newProviders = [...providers];
-      const currentPriority = newProviders[currentIndex].priority!;
-      const targetPriority = newProviders[targetIndex].priority!;
-      
-      newProviders[currentIndex] = { ...newProviders[currentIndex], priority: targetPriority };
-      newProviders[targetIndex] = { ...newProviders[targetIndex], priority: currentPriority };
-      
-      newProviders.sort((a, b) => (a.priority || 0) - (b.priority || 0));
-      
-      setProviders(newProviders);
-      
-      toast({
-        title: 'Priority updated',
-        description: `${provider.name} priority has been updated`,
+      // Update the local state to reflect the changes
+      setProviders(prevProviders => {
+        const updatedProviders = [...prevProviders];
+        updatedProviders[currentIndex] = { ...targetProvider };
+        updatedProviders[targetIndex] = { ...provider };
+        return updatedProviders;
       });
       
       return Promise.resolve();
-    } catch (error) {
-      console.error('Error updating priority:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update provider priority',
-        variant: 'destructive',
-      });
+    } catch (error: any) {
+      console.error('Error updating provider priority:', error);
+      toast.error(`Failed to update provider priority: ${error.message}`);
       return Promise.reject(error);
     }
   };
   
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+  const getAvailableProviders = (): ProviderInfo[] => {
+    const connectedProviderTypes = providers
+      .filter(p => p.status === 'connected')
+      .map(p => p.type);
+    
+    // Create a list of available providers that aren't already connected
+    const availableProviders: ProviderInfo[] = [
+      {
+        id: 'google-drive',
+        name: 'Google Drive',
+        type: 'google-drive',
+        description: 'Connect to your Google Drive account',
+        status: 'disconnected'
+      },
+      {
+        id: 'dropbox',
+        name: 'Dropbox',
+        type: 'dropbox',
+        description: 'Connect to your Dropbox account',
+        status: 'disconnected'
+      },
+      {
+        id: 'onedrive',
+        name: 'OneDrive',
+        type: 'onedrive',
+        description: 'Connect to your Microsoft OneDrive account',
+        status: 'disconnected'
+      },
+      {
+        id: 'box',
+        name: 'Box',
+        type: 'box',
+        description: 'Connect to your Box account',
+        status: 'disconnected'
+      },
+      {
+        id: 'amazon-s3',
+        name: 'Amazon S3',
+        type: 'amazon-s3',
+        description: 'Connect to your Amazon S3 bucket',
+        status: 'disconnected'
+      },
+      {
+        id: 'backblaze',
+        name: 'Backblaze B2',
+        type: 'backblaze',
+        description: 'Connect to your Backblaze B2 storage',
+        status: 'disconnected'
+      },
+      {
+        id: 'mega',
+        name: 'MEGA',
+        type: 'mega',
+        description: 'Connect to your MEGA account',
+        status: 'disconnected'
+      },
+      {
+        id: 'pcloud',
+        name: 'pCloud',
+        type: 'pcloud',
+        description: 'Connect to your pCloud account',
+        status: 'disconnected'
+      },
+      {
+        id: 'yandex-disk',
+        name: 'Yandex Disk',
+        type: 'yandex-disk',
+        description: 'Connect to your Yandex Disk',
+        status: 'disconnected'
+      },
+      {
+        id: 'icedrive',
+        name: 'Icedrive',
+        type: 'icedrive',
+        description: 'Connect to your Icedrive account',
+        status: 'disconnected'
+      },
+      {
+        id: 'sync',
+        name: 'Sync.com',
+        type: 'sync',
+        description: 'Connect to your Sync.com account',
+        status: 'disconnected'
+      }
+    ].filter(p => !connectedProviderTypes.includes(p.type));
+    
+    return availableProviders;
+  };
+
+  const handleConnectSuccess = async () => {
+    setConnectDialogOpen(false);
+    setSelectedProviderType(null);
+    
+    // Reload providers
+    setLoading(true);
+    try {
+      const providersData = await getStorageProviders();
+      const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
+        id: provider.id,
+        name: getProviderDisplayName(provider.provider_name),
+        type: provider.provider_name as any,
+        description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
+        totalSpace: provider.total_space || 0,
+        usedSpace: provider.used_space || 0,
+        status: provider.status as any,
+        priority: provider.priority
+      }));
+      setProviders(formattedProviders);
+      
+      const storage = await getStorageUsage();
+      setStorageStats({
+        totalSpace: storage.totalSpace,
+        usedSpace: storage.usedSpace
+      });
+      
+      toast.success('Provider connected successfully!');
+    } catch (error: any) {
+      console.error('Error refreshing providers after connection:', error);
+      toast.error(`Error refreshing providers: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
     
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   };
 
-  const renderProviderCards = (filterStatus?: 'connected' | 'disconnected') => {
-    let filteredProviders = providers;
-    
-    if (filterStatus) {
-      filteredProviders = providers.filter(provider => provider.status === filterStatus);
-    }
-    
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProviders.map((provider) => (
-          <ProviderCard 
-            key={provider.id}
-            provider={provider}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onChangePriority={handleChangePriority}
-          />
-        ))}
-        
-        <ProviderCard 
-          provider={{ id: 'add', name: 'Add Provider', type: 'add' }}
-          onConnect={() => {
-            setConnectDialogOpen(true);
-            return Promise.resolve();
-          }}
-        />
-      </div>
-    );
-  };
-
-  if (loading) {
+  if (!user) {
     return (
       <AppLayout title="Storage Providers">
-        <div className="flex justify-center items-center h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-          <span>Loading providers...</span>
-        </div>
+        <Card className="p-6">
+          <CardContent className="flex flex-col items-center justify-center space-y-4 pt-6">
+            <h2 className="text-xl font-semibold">Authentication Required</h2>
+            <p className="text-center text-muted-foreground">
+              You need to be logged in to manage your storage providers.
+            </p>
+            <Button className="mt-4" onClick={() => window.location.href = '/login'}>
+              Log In
+            </Button>
+          </CardContent>
+        </Card>
       </AppLayout>
     );
   }
 
   return (
     <AppLayout title="Storage Providers">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <Card className="md:col-span-3">
+      <div className="mb-6">
+        <Card>
           <CardHeader>
             <CardTitle>Storage Overview</CardTitle>
             <CardDescription>
-              Total space across all connected providers
+              Manage your connected storage providers and view usage statistics
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-primary/10 rounded-lg p-4">
-                <div className="text-sm text-muted-foreground">Total Storage</div>
-                <div className="text-2xl font-bold mt-1">
-                  {formatSize(storageStats.totalSpace)}
-                </div>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Storage Usage</span>
+                <span className="text-sm text-muted-foreground">
+                  {formatBytes(storageStats.usedSpace)} / {formatBytes(storageStats.totalSpace)}
+                </span>
               </div>
-              
-              <div className="bg-secondary/10 rounded-lg p-4">
-                <div className="text-sm text-muted-foreground">Used Space</div>
-                <div className="text-2xl font-bold mt-1">
-                  {formatSize(storageStats.usedSpace)}
-                </div>
+              <Progress 
+                value={(storageStats.usedSpace / storageStats.totalSpace) * 100} 
+                className="h-2"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Connected Providers</span>
+                <span className="text-2xl font-bold">
+                  {providers.filter(p => p.status === 'connected').length}
+                </span>
               </div>
-              
-              <div className="bg-accent/10 rounded-lg p-4">
-                <div className="text-sm text-muted-foreground">Available Space</div>
-                <div className="text-2xl font-bold mt-1">
-                  {formatSize(storageStats.totalSpace - storageStats.usedSpace)}
-                </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Total Space</span>
+                <span className="text-2xl font-bold">
+                  {formatBytes(storageStats.totalSpace)}
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
       
-      <Tabs defaultValue="all-providers">
-        <div className="flex justify-between items-center mb-4">
-          <TabsList>
-            <TabsTrigger value="all-providers">All Providers</TabsTrigger>
-            <TabsTrigger value="connected">Connected</TabsTrigger>
-            <TabsTrigger value="disconnected">Disconnected</TabsTrigger>
-          </TabsList>
-          
-          <Button onClick={() => setConnectDialogOpen(true)}>
+      <Tabs defaultValue="connected">
+        <TabsList className="mb-4">
+          <TabsTrigger value="connected">
+            <Cloud className="h-4 w-4 mr-2" />
+            Connected
+          </TabsTrigger>
+          <TabsTrigger value="available">
             <PlusCircle className="h-4 w-4 mr-2" />
-            Add Provider
-          </Button>
-        </div>
+            Available
+          </TabsTrigger>
+          <TabsTrigger value="disconnected">
+            <CloudOff className="h-4 w-4 mr-2" />
+            Disconnected
+          </TabsTrigger>
+        </TabsList>
         
-        <TabsContent value="all-providers" className="mt-0">
-          {renderProviderCards()}
-        </TabsContent>
-        
-        <TabsContent value="connected" className="mt-0">
-          {renderProviderCards('connected')}
-        </TabsContent>
-        
-        <TabsContent value="disconnected" className="mt-0">
-          {renderProviderCards('disconnected')}
-          
-          {providers.filter(provider => provider.status === 'disconnected').length === 0 && (
-            <div className="col-span-3 text-center py-12">
-              <div className="text-muted-foreground mb-2">
-                No disconnected providers
-              </div>
-              <Button onClick={() => setConnectDialogOpen(true)}>
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Add Provider
-              </Button>
+        <TabsContent value="connected">
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+              <span>Loading providers...</span>
             </div>
+          ) : (
+            <>
+              {providers.filter(p => p.status === 'connected').length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center space-y-4 p-6">
+                    <Cloud className="h-12 w-12 text-muted-foreground mb-2" />
+                    <h2 className="text-xl font-semibold">No Connected Providers</h2>
+                    <p className="text-center text-muted-foreground">
+                      You don't have any storage providers connected yet. Add one to get started.
+                    </p>
+                    <Button onClick={() => handleOpenConnect('google-drive')}>
+                      <PlusCircle className="h-4 w-4 mr-2" />
+                      Connect a Provider
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {providers
+                    .filter(provider => provider.status === 'connected')
+                    .sort((a, b) => (a.priority || 0) - (b.priority || 0))
+                    .map(provider => (
+                      <ProviderCard 
+                        key={provider.id}
+                        provider={provider}
+                        onConnect={handleConnect}
+                        onDisconnect={handleDisconnect}
+                        onChangePriority={handleChangePriority}
+                      />
+                    ))
+                  }
+                </div>
+              )}
+            </>
           )}
+        </TabsContent>
+        
+        <TabsContent value="available">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {getAvailableProviders().map(provider => (
+              <ProviderCard 
+                key={provider.id}
+                provider={provider}
+                onConnect={() => handleOpenConnect(provider.type)}
+              />
+            ))}
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="disconnected">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {providers
+              .filter(provider => provider.status === 'disconnected')
+              .map(provider => (
+                <ProviderCard 
+                  key={provider.id}
+                  provider={provider}
+                  onConnect={handleConnect}
+                />
+              ))
+            }
+            {providers.filter(p => p.status === 'disconnected').length === 0 && (
+              <Card className="col-span-3">
+                <CardContent className="flex flex-col items-center justify-center space-y-4 p-6">
+                  <CloudOff className="h-12 w-12 text-muted-foreground mb-2" />
+                  <h2 className="text-xl font-semibold">No Disconnected Providers</h2>
+                  <p className="text-center text-muted-foreground">
+                    You don't have any disconnected providers.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
       
       {selectedProviderType && (
         <ConnectProviderDialog
           open={connectDialogOpen}
-          onClose={() => {
-            setConnectDialogOpen(false);
-            setSelectedProviderType(null);
-          }}
+          onClose={() => setConnectDialogOpen(false)}
           provider={selectedProviderType}
-          onSuccess={() => {
-            getStorageProviders().then(providersData => {
-              const formattedProviders: ProviderInfo[] = providersData.map(provider => ({
-                id: provider.id,
-                name: getProviderDisplayName(provider.provider_name),
-                type: provider.provider_name,
-                description: `Connected as ${provider.provider_user_email || 'Unknown user'}`,
-                totalSpace: provider.total_space || 0,
-                usedSpace: provider.used_space || 0,
-                status: provider.status as any,
-                priority: provider.priority
-              }));
-              
-              setProviders(formattedProviders);
-            });
-          }}
+          onSuccess={handleConnectSuccess}
         />
       )}
-      
-      <Dialog open={connectDialogOpen && !selectedProviderType} onOpenChange={setConnectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Connect Storage Provider</DialogTitle>
-            <DialogDescription>
-              Select a cloud storage provider to connect to your account.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Select 
-                onValueChange={(value: ProviderInfo['type']) => handleOpenConnect(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="google-drive">Google Drive</SelectItem>
-                  <SelectItem value="dropbox">Dropbox</SelectItem>
-                  <SelectItem value="onedrive">OneDrive</SelectItem>
-                  <SelectItem value="box">Box</SelectItem>
-                  <SelectItem value="amazon-s3">Amazon S3</SelectItem>
-                  <SelectItem value="backblaze">Backblaze</SelectItem>
-                  <SelectItem value="mega">MEGA</SelectItem>
-                  <SelectItem value="pcloud">pCloud</SelectItem>
-                  <SelectItem value="yandex-disk">Yandex Disk</SelectItem>
-                  <SelectItem value="icedrive">Icedrive</SelectItem>
-                  <SelectItem value="sync">Sync.com</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <Separator />
-            
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setConnectDialogOpen(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 };

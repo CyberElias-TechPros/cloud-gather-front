@@ -1,134 +1,176 @@
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from "@/integrations/supabase/client";
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
-interface UserProfile {
-  id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-}
-
+// Define the context type
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  profile: UserProfile | null;
   loading: boolean;
-  signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, metadata?: object) => Promise<void>;
+  logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updateProfile: (data: { username?: string; avatar_url?: string }) => Promise<void>;
 }
 
+// Create the context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Provider component
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        // Fetch user profile in a separate call (not inside the callback)
+
+        // Only fetch additional data if needed, using setTimeout to prevent deadlock
         if (session?.user) {
           setTimeout(() => {
-            fetchUserProfile(session.user.id);
+            // Additional actions when user is logged in, e.g., fetch profile
           }, 0);
-        } else {
-          setProfile(null);
         }
       }
     );
 
-    // THEN check for existing session
+    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
+  const login = async (email: string, password: string) => {
     try {
-      // Using type-safe approach with explicit type casting for database operations
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
       if (error) {
         throw error;
       }
 
-      setProfile(data as UserProfile);
+      toast.success('Successfully logged in!');
+      return data;
     } catch (error: any) {
-      console.error('Error fetching profile:', error);
-      toast.error('Failed to load user profile');
+      toast.error(`Error logging in: ${error.message}`);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  const signOut = async () => {
+  const register = async (email: string, password: string, metadata?: object) => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setUser(null);
-      setSession(null);
-      setProfile(null);
-      toast.success('Signed out successfully');
+      setLoading(true);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Registration successful! Please check your email for verification.');
+      return data;
     } catch (error: any) {
-      console.error('Error signing out:', error);
-      toast.error('Failed to sign out');
+      toast.error(`Error registering: ${error.message}`);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
-    if (!user?.id) return;
-
+  const logout = async () => {
     try {
-      // Using type-safe approach with explicit type casting for database operations
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates as any)
-        .eq('id', user.id);
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
 
-      if (error) throw error;
-      
-      // Refresh profile data
-      setProfile(prev => prev ? { ...prev, ...updates } : null);
-      toast.success('Profile updated successfully');
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Successfully logged out!');
     } catch (error: any) {
-      console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      toast.error(`Error logging out: ${error.message}`);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Password reset instructions sent to your email!');
+    } catch (error: any) {
+      toast.error(`Error resetting password: ${error.message}`);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateProfile = async (data: { username?: string; avatar_url?: string }) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.updateUser({
+        data,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Profile updated successfully!');
+    } catch (error: any) {
+      toast.error(`Error updating profile: ${error.message}`);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const value = {
     user,
     session,
-    profile,
     loading,
-    signOut,
-    updateProfile
+    login,
+    register,
+    logout,
+    resetPassword,
+    updateProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// Custom hook to use the auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {

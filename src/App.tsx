@@ -10,6 +10,7 @@ import ProvidersPage from "./pages/ProvidersPage";
 import RegisterPage from "./pages/RegisterPage";
 import APIDocs from "./pages/APIDocs";
 import RecentsPage from "./pages/RecentsPage";
+import TeamPage from "./pages/TeamPage";
 
 const router = createBrowserRouter([
   {
@@ -48,6 +49,10 @@ const router = createBrowserRouter([
   {
     path: "/recents",
     element: <RecentsPage />,
+  },
+  {
+    path: "/team",
+    element: <TeamPage />,
   },
 ]);
 

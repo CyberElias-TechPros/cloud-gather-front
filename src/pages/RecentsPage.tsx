@@ -2,253 +2,281 @@
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { FileGrid } from '@/components/files/FileGrid';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  CalendarDays, 
-  Clock, 
-  FileText, 
-  Image as ImageIcon, 
-  MoreHorizontal, 
-  Video,
-  Loader2
-} from 'lucide-react';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { getRecentFiles, searchRecentFiles, filterRecentFiles } from '@/services/recentFilesService';
-import { FileItem } from '@/types/file';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { FileGrid } from '@/components/files/FileGrid';
+import { FileItem } from '@/types/file';
+import { getRecentFiles, getStarredFiles } from '@/services/cloudProviders';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  Clock,
+  Star,
+  Search,
+  Calendar,
+  FileText,
+  RefreshCcw,
+  Loader2,
+  Grid,
+  List,
+  Upload,
+  SlidersHorizontal
+} from 'lucide-react';
 
 const RecentsPage = () => {
-  const [files, setFiles] = useState<FileItem[]>([]);
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [filter, setFilter] = useState('all');
+  const [recentFiles, setRecentFiles] = useState<FileItem[]>([]);
+  const [starredFiles, setStarredFiles] = useState<FileItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activePeriod, setActivePeriod] = useState<'today' | 'yesterday' | 'week' | 'month'>('today');
-
+  const [timePeriod, setTimePeriod] = useState<'today' | 'yesterday' | 'week' | 'month'>('week');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  
   useEffect(() => {
+    if (!user) return;
     loadFiles();
-  }, [activePeriod, filter]);
-
+  }, [user, timePeriod]);
+  
   const loadFiles = async () => {
     setLoading(true);
     try {
-      let fetchedFiles: FileItem[];
+      // Load recent files based on selected time period
+      const recentFilesData = await getRecentFiles(50, timePeriod);
+      setRecentFiles(recentFilesData);
       
-      if (searchQuery) {
-        fetchedFiles = await searchRecentFiles(searchQuery, activePeriod);
-      } else if (filter !== 'all') {
-        fetchedFiles = await filterRecentFiles(filter as any, activePeriod);
-      } else {
-        fetchedFiles = await getRecentFiles(activePeriod);
-      }
-      
-      setFiles(fetchedFiles);
-    } catch (error) {
-      console.error('Error loading recent files:', error);
-      toast.error('Failed to load recent files');
-      setFiles([]);
+      // Load starred files
+      const starredFilesData = await getStarredFiles();
+      setStarredFiles(starredFilesData);
+    } catch (error: any) {
+      console.error('Error loading files:', error);
+      toast.error(`Failed to load files: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
-
-  const handleSearch = async () => {
-    setLoading(true);
-    try {
-      const results = await searchRecentFiles(searchQuery, activePeriod);
-      setFiles(results);
-    } catch (error) {
-      console.error('Error searching files:', error);
-      toast.error('Search failed');
-    } finally {
-      setLoading(false);
+  
+  const handleFileOpen = (file: FileItem) => {
+    if (file.is_folder) {
+      // Navigate to folder
+      window.location.href = `/files?folder=${file.id}`;
+    } else {
+      // Preview/download file
+      toast.info(`Opening ${file.filename}`);
     }
   };
-
-  const handleFilterChange = (value: string) => {
-    setFilter(value);
+  
+  const handleRefresh = () => {
+    loadFiles();
   };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    if (!e.target.value) {
-      loadFiles();
-    }
+  
+  // Filter files based on search query
+  const filterFiles = (files: FileItem[]) => {
+    if (!searchQuery.trim()) return files;
+    
+    return files.filter(file => 
+      file.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (file.mime_type && file.mime_type.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
   };
+  
+  const filteredRecentFiles = filterFiles(recentFiles);
+  const filteredStarredFiles = filterFiles(starredFiles);
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
+  // If user is not logged in
+  if (!user) {
+    return (
+      <AppLayout title="Recent Files">
+        <Card className="p-6">
+          <CardContent className="flex flex-col items-center justify-center space-y-4 pt-6">
+            <h2 className="text-xl font-semibold">Authentication Required</h2>
+            <p className="text-center text-muted-foreground">
+              You need to be logged in to view your recent files.
+            </p>
+            <Button className="mt-4" onClick={() => window.location.href = '/login'}>
+              Log In
+            </Button>
+          </CardContent>
+        </Card>
+      </AppLayout>
+    );
+  }
+  
   return (
-    <AppLayout title="Recent Files">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight">Recent Activity</h2>
-          <div className="flex space-x-2">
-            <div className="hidden md:flex items-center bg-muted rounded-md px-3 py-2">
-              <Input 
-                type="text" 
-                placeholder="Search recent files..." 
-                className="border-0 bg-transparent focus-visible:ring-0 h-8 p-0"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-              />
-            </div>
-            <Select
-              value={filter}
-              onValueChange={handleFilterChange}
-            >
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Filter" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All files</SelectItem>
-                <SelectItem value="documents">Documents</SelectItem>
-                <SelectItem value="images">Images</SelectItem>
-                <SelectItem value="videos">Videos</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </div>
+    <AppLayout title="Recent Activity">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 space-y-4 md:space-y-0">
+        <div>
+          <h1 className="text-2xl font-bold">Recent Activity</h1>
+          <p className="text-muted-foreground">
+            View your recently accessed and starred files
+          </p>
         </div>
-
-        <Tabs 
-          defaultValue="today" 
-          value={activePeriod} 
-          onValueChange={(value) => setActivePeriod(value as any)}
-          className="w-full"
-        >
-          <TabsList>
-            <TabsTrigger value="today">Today</TabsTrigger>
-            <TabsTrigger value="yesterday">Yesterday</TabsTrigger>
-            <TabsTrigger value="week">This Week</TabsTrigger>
-            <TabsTrigger value="month">This Month</TabsTrigger>
-          </TabsList>
+        
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+          <Select value={timePeriod} onValueChange={(value) => setTimePeriod(value as any)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select time period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span>Today</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="yesterday">
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span>Yesterday</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="week">
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span>Past Week</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="month">
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span>Past Month</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
           
-          {(['today', 'yesterday', 'week', 'month'] as const).map((period) => (
-            <TabsContent key={period} value={period} className="mt-0 pt-4">
-              {loading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {Array(8).fill(null).map((_, i) => (
-                    <div key={i} className="border rounded-lg overflow-hidden">
-                      <Skeleton className="h-32 w-full" />
-                      <div className="p-3">
-                        <Skeleton className="h-4 w-3/4 mb-2" />
-                        <Skeleton className="h-3 w-1/2" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : files.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="bg-muted inline-flex rounded-full p-3 mb-4">
-                    <Clock className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-medium mb-2">No recent files</h3>
-                  <p className="text-muted-foreground mb-4 max-w-md mx-auto">
-                    {period === 'today' && "You haven't accessed any files today."}
-                    {period === 'yesterday' && "You didn't access any files yesterday."}
-                    {period === 'week' && "You haven't accessed any files this week."}
-                    {period === 'month' && "You haven't accessed any files this month."}
-                  </p>
-                  <Button>Upload a File</Button>
-                </div>
-              ) : (
-                <FileGrid files={files} view={view} />
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
-
-        <div className="mt-8">
-          <h3 className="text-lg font-medium mb-4">Recent File Types</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex space-x-1">
             <Button 
               variant="outline" 
-              className="h-auto py-6 flex items-center justify-center"
-              onClick={() => {
-                setFilter('documents');
-                loadFiles();
-              }}
+              size="icon"
+              onClick={() => setView('grid')}
+              className={view === 'grid' ? 'bg-accent' : ''}
             >
-              <div className="text-center">
-                <div className="bg-blue-50 text-blue-500 p-3 rounded-full mx-auto mb-3">
-                  <FileText className="h-6 w-6" />
-                </div>
-                <h3 className="font-medium">Documents</h3>
-                <p className="text-muted-foreground text-sm mt-1">View recent documents</p>
-              </div>
+              <Grid className="h-4 w-4" />
             </Button>
             <Button 
               variant="outline" 
-              className="h-auto py-6 flex items-center justify-center"
-              onClick={() => {
-                setFilter('images');
-                loadFiles();
-              }}
+              size="icon"
+              onClick={() => setView('list')}
+              className={view === 'list' ? 'bg-accent' : ''}
             >
-              <div className="text-center">
-                <div className="bg-green-50 text-green-500 p-3 rounded-full mx-auto mb-3">
-                  <ImageIcon className="h-6 w-6" />
-                </div>
-                <h3 className="font-medium">Images</h3>
-                <p className="text-muted-foreground text-sm mt-1">View recent images</p>
-              </div>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-auto py-6 flex items-center justify-center"
-              onClick={() => {
-                setFilter('videos');
-                loadFiles();
-              }}
-            >
-              <div className="text-center">
-                <div className="bg-purple-50 text-purple-500 p-3 rounded-full mx-auto mb-3">
-                  <Video className="h-6 w-6" />
-                </div>
-                <h3 className="font-medium">Videos</h3>
-                <p className="text-muted-foreground text-sm mt-1">View recent videos</p>
-              </div>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-auto py-6 flex items-center justify-center"
-              onClick={() => {
-                setFilter('all');
-                loadFiles();
-              }}
-            >
-              <div className="text-center">
-                <div className="bg-orange-50 text-orange-500 p-3 rounded-full mx-auto mb-3">
-                  <CalendarDays className="h-6 w-6" />
-                </div>
-                <h3 className="font-medium">View All</h3>
-                <p className="text-muted-foreground text-sm mt-1">All recent files</p>
-              </div>
+              <List className="h-4 w-4" />
             </Button>
           </div>
+          
+          <Button variant="outline" onClick={handleRefresh}>
+            <RefreshCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
       </div>
+      
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search in recent files..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+      
+      <Tabs defaultValue="recent">
+        <TabsList className="mb-4">
+          <TabsTrigger value="recent">
+            <Clock className="h-4 w-4 mr-2" />
+            Recent Files
+          </TabsTrigger>
+          <TabsTrigger value="starred">
+            <Star className="h-4 w-4 mr-2" />
+            Starred
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="recent" className="mt-0">
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+              <span>Loading recent files...</span>
+            </div>
+          ) : filteredRecentFiles.length > 0 ? (
+            <FileGrid 
+              files={filteredRecentFiles} 
+              view={view} 
+              onFileOpen={handleFileOpen} 
+            />
+          ) : searchQuery ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Search className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-1">No matching files found</h3>
+                <p className="text-center text-muted-foreground">
+                  Try adjusting your search term or time filter.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Clock className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-1">No recent files</h3>
+                <p className="text-center text-muted-foreground mb-4">
+                  You haven't accessed any files {timePeriod === 'today' ? 'today' : 
+                                                timePeriod === 'yesterday' ? 'yesterday' : 
+                                                timePeriod === 'week' ? 'in the past week' : 
+                                                'in the past month'}.
+                </p>
+                <Button onClick={() => window.location.href = '/files'}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Browse All Files
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="starred" className="mt-0">
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+              <span>Loading starred files...</span>
+            </div>
+          ) : filteredStarredFiles.length > 0 ? (
+            <FileGrid 
+              files={filteredStarredFiles} 
+              view={view} 
+              onFileOpen={handleFileOpen} 
+            />
+          ) : searchQuery ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Search className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-1">No matching starred files found</h3>
+                <p className="text-center text-muted-foreground">
+                  Try adjusting your search term or time filter.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Star className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-1">No starred files</h3>
+                <p className="text-center text-muted-foreground mb-4">
+                  Star files to easily access them from here.
+                </p>
+                <Button onClick={() => window.location.href = '/files'}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Browse All Files
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </AppLayout>
   );
 };
