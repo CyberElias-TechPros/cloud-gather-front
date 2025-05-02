@@ -11,11 +11,17 @@ import RegisterPage from "./pages/RegisterPage";
 import APIDocs from "./pages/APIDocs";
 import RecentsPage from "./pages/RecentsPage";
 import TeamPage from "./pages/TeamPage";
+import AuthPage from "./pages/AuthPage";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <DashboardPage />,
+    element: (
+      <ProtectedRoute>
+        <DashboardPage />
+      </ProtectedRoute>
+    ),
     errorElement: <ErrorPage />,
   },
   {
@@ -23,36 +29,68 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
+    path: "/auth",
+    element: <AuthPage />,
+  },
+  {
     path: "/register",
     element: <RegisterPage />,
   },
   {
     path: "/storage",
-    element: <StoragePage />,
+    element: (
+      <ProtectedRoute>
+        <StoragePage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/files",
-    element: <FilesPage />,
+    element: (
+      <ProtectedRoute>
+        <FilesPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/settings",
-    element: <SettingsPage />,
+    element: (
+      <ProtectedRoute>
+        <SettingsPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/providers",
-    element: <ProvidersPage />,
+    element: (
+      <ProtectedRoute>
+        <ProvidersPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/api-docs",
-    element: <APIDocs />,
+    element: (
+      <ProtectedRoute>
+        <APIDocs />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/recents",
-    element: <RecentsPage />,
+    element: (
+      <ProtectedRoute>
+        <RecentsPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/team",
-    element: <TeamPage />,
+    element: (
+      <ProtectedRoute>
+        <TeamPage />
+      </ProtectedRoute>
+    ),
   },
 ]);
 

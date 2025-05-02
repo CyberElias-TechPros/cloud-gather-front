@@ -108,9 +108,7 @@ export const getProviderIcon = (providerType: string): React.FC<{ className?: st
       return require('../components/icons/provider-icons').SyncIcon;
     default:
       // Default icon for unknown provider types
-      return ({ className }) => {
-        const DefaultIcon = require('../components/icons/provider-icons').BoxIcon;
-        return <DefaultIcon className={className} />;
-      };
+      const DefaultIcon = require('../components/icons/provider-icons').BoxIcon;
+      return DefaultIcon;
   }
 };

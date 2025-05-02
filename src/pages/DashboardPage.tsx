@@ -1,25 +1,30 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StorageOverview } from '@/components/dashboard/StorageOverview';
 import { ActivityFeed, ActivityItem } from '@/components/dashboard/ActivityFeed';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { FileGrid } from '@/components/files/FileGrid';
+import { EnhancedFileGrid } from '@/components/files/EnhancedFileGrid';
 import { FileItem } from '@/types/file';
 import { UploadDropzone } from '@/components/uploads/UploadDropzone';
 import { UploadProgress, UploadItem } from '@/components/uploads/UploadProgress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Upload, Clock, FileText, Upload as UploadIcon, Loader2 } from 'lucide-react';
-import { getRecentFiles, getStorageUsage, uploadFile } from '@/services/cloudProviders';
+import { fileOperations } from '@/services/fileOperations';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import Link from 'next/link';
 
 const DashboardPage = () => {
-  const [loading, setLoading] = React.useState(true);
-  const [uploadItems, setUploadItems] = React.useState<UploadItem[]>([]);
-  const [recentFiles, setRecentFiles] = React.useState<FileItem[]>([]);
+  const { user, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
+  const [recentFiles, setRecentFiles] = useState<FileItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   
-  const [storageData, setStorageData] = React.useState<{
+  const [storageData, setStorageData] = useState<{
     totalSpace: number;
     usedSpace: number;
     providers: {
@@ -33,57 +38,171 @@ const DashboardPage = () => {
     usedSpace: 0,
     providers: []
   });
-  
-  // Sample activity data - in a real implementation this would come from the database
-  const recentActivities: ActivityItem[] = [
-    {
-      id: '1',
-      type: 'upload',
-      fileName: 'Project Presentation.pptx',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30) // 30 minutes ago
-    },
-    {
-      id: '2',
-      type: 'share',
-      fileName: 'Budget 2023.xlsx',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) // 2 hours ago
-    },
-    {
-      id: '3',
-      type: 'edit',
-      fileName: 'Meeting Notes.docx',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5) // 5 hours ago
-    },
-    {
-      id: '4',
-      type: 'download',
-      fileName: 'Company Logo.png',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) // 1 day ago
+
+  useEffect(() => {
+    if (authLoading) return;
+    
+    if (!user) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
     }
-  ];
-  
-  React.useEffect(() => {
-    const loadDashboardData = async () => {
-      setLoading(true);
-      
-      try {
-        // Fetch storage usage
-        const storage = await getStorageUsage();
-        setStorageData(storage);
-        
-        // Fetch recent files
-        const files = await getRecentFiles(10);
-        setRecentFiles(files);
-      } catch (error) {
-        console.error('Error loading dashboard data:', error);
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
     
     loadDashboardData();
-  }, []);
+    
+    // Set up realtime subscription for file activities
+    const channel = supabase
+      .channel('public:files')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'files' },
+        handleFileActivity
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, authLoading]);
+
+  const handleFileActivity = (payload: any) => {
+    const fileData = payload.new;
+    
+    if (!fileData) return;
+    
+    let activityType: 'upload' | 'edit' | 'share' | 'delete' | 'download' = 'edit';
+    
+    switch (payload.eventType) {
+      case 'INSERT':
+        activityType = 'upload';
+        break;
+      case 'UPDATE':
+        if (payload.new.is_shared && !payload.old.is_shared) {
+          activityType = 'share';
+        } else if (payload.new.last_accessed_at !== payload.old.last_accessed_at) {
+          activityType = 'download';
+        } else {
+          activityType = 'edit';
+        }
+        break;
+      case 'DELETE':
+        activityType = 'delete';
+        break;
+    }
+    
+    const newActivity: ActivityItem = {
+      id: `activity-${Date.now()}`,
+      type: activityType,
+      fileName: fileData.filename,
+      timestamp: new Date()
+    };
+    
+    setActivities(prev => [newActivity, ...prev.slice(0, 9)]);
+  };
+
+  const loadDashboardData = async () => {
+    setLoading(true);
+    
+    try {
+      // Fetch storage usage
+      const storage = await fetchStorageUsage();
+      setStorageData(storage);
+      
+      // Fetch recent files
+      const files = await fetchRecentFiles(10);
+      setRecentFiles(files);
+      
+      // Generate some sample activities if none exist yet
+      setActivities([
+        {
+          id: '1',
+          type: 'upload',
+          fileName: 'Project Presentation.pptx',
+          timestamp: new Date(Date.now() - 1000 * 60 * 30) // 30 minutes ago
+        },
+        {
+          id: '2',
+          type: 'share',
+          fileName: 'Budget 2023.xlsx',
+          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) // 2 hours ago
+        },
+        {
+          id: '3',
+          type: 'edit',
+          fileName: 'Meeting Notes.docx',
+          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5) // 5 hours ago
+        },
+        {
+          id: '4',
+          type: 'download',
+          fileName: 'Company Logo.png',
+          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) // 1 day ago
+        }
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const fetchStorageUsage = async () => {
+    try {
+      // Get storage providers
+      const { data: providers, error } = await supabase
+        .from('storage_providers')
+        .select('*')
+        .eq('user_id', user!.id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      const formattedProviders = providers?.map(provider => ({
+        id: provider.id,
+        name: provider.provider_name,
+        totalSpace: provider.total_space || 0,
+        usedSpace: provider.used_space || 0,
+        type: 'External'
+      })) || [];
+      
+      // Calculate totals
+      const totalSpace = formattedProviders.reduce((acc, provider) => acc + provider.totalSpace, 0);
+      const usedSpace = formattedProviders.reduce((acc, provider) => acc + provider.usedSpace, 0);
+      
+      return {
+        totalSpace,
+        usedSpace,
+        providers: formattedProviders
+      };
+    } catch (error) {
+      console.error('Error fetching storage usage:', error);
+      return {
+        totalSpace: 0,
+        usedSpace: 0,
+        providers: []
+      };
+    }
+  };
+  
+  const fetchRecentFiles = async (limit: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('files')
+        .select('*')
+        .order('last_accessed_at', { ascending: false })
+        .limit(limit);
+      
+      if (error) {
+        throw error;
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching recent files:', error);
+      return [];
+    }
+  };
   
   const handleFilesSelected = async (files: File[]) => {
     const newUploads: UploadItem[] = files.map((file, index) => ({
@@ -101,25 +220,28 @@ const DashboardPage = () => {
       const file = files[i];
       const uploadItem = newUploads[i];
       
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadItems((prevUploads) => {
-          return prevUploads.map((item) => {
-            if (item.id === uploadItem.id) {
-              const newProgress = Math.min(95, item.progress + 5); // Cap at 95% until really done
-              return { ...item, progress: newProgress };
-            }
-            return item;
-          });
-        });
-      }, 200);
-      
       try {
-        // Upload the file
-        const uploadedFile = await uploadFile(file);
+        // Upload the file with progress tracking
+        const uploadedFile = await fileOperations.uploadFile(
+          file, 
+          null, 
+          null, 
+          (progress) => {
+            setUploadItems((prevUploads) => {
+              return prevUploads.map((item) => {
+                if (item.id === uploadItem.id) {
+                  return { ...item, progress };
+                }
+                return item;
+              });
+            });
+          }
+        );
         
-        // Update recent files if needed
-        setRecentFiles((prevFiles) => [uploadedFile, ...prevFiles.slice(0, 9)]);
+        if (uploadedFile) {
+          // Update recent files
+          setRecentFiles((prevFiles) => [uploadedFile, ...prevFiles.slice(0, 9)]);
+        }
         
         // Update upload status
         setUploadItems((prevUploads) => {
@@ -150,8 +272,6 @@ const DashboardPage = () => {
         });
         
         toast.error(`Failed to upload ${file.name}`);
-      } finally {
-        clearInterval(progressInterval);
       }
     }
   };
@@ -163,6 +283,8 @@ const DashboardPage = () => {
   };
   
   const handleRetryUpload = (id: string) => {
+    // In a real implementation, we would need to store the original File object
+    // For now, we'll just simulate progress
     setUploadItems((prevUploads) => 
       prevUploads.map((item) => 
         item.id === id ? { ...item, progress: 0, status: 'uploading' as const, error: undefined } : item
@@ -197,6 +319,17 @@ const DashboardPage = () => {
     );
   };
 
+  if (authLoading) {
+    return (
+      <AppLayout title="Dashboard">
+        <div className="flex justify-center items-center h-[50vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+          <span>Checking authentication...</span>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout title="Dashboard">
       {loading ? (
@@ -211,7 +344,7 @@ const DashboardPage = () => {
               <StorageOverview storageData={storageData} />
             </div>
             <div>
-              <ActivityFeed activities={recentActivities} />
+              <ActivityFeed activities={activities} />
             </div>
           </div>
           
@@ -244,23 +377,37 @@ const DashboardPage = () => {
               </TabsList>
               
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  <UploadIcon className="h-4 w-4 mr-2" />
-                  Upload Files
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/files">
+                    <UploadIcon className="h-4 w-4 mr-2" />
+                    Go to Files
+                  </Link>
                 </Button>
-                <Button size="sm">
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  New Folder
+                <Button size="sm" asChild>
+                  <Link href="/providers">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Add Storage
+                  </Link>
                 </Button>
               </div>
             </div>
             
             <TabsContent value="recent" className="mt-0">
-              <FileGrid files={recentFiles} view="list" />
+              <EnhancedFileGrid 
+                initialFiles={recentFiles} 
+                view="list"
+                hideToolbar
+                hideBreadcrumb
+              />
             </TabsContent>
             
             <TabsContent value="quick" className="mt-0">
-              <FileGrid files={recentFiles.slice(0, 2)} view="list" />
+              <EnhancedFileGrid 
+                initialFiles={recentFiles.filter(f => f.is_starred)} 
+                view="list"
+                hideToolbar
+                hideBreadcrumb
+              />
             </TabsContent>
           </Tabs>
         </>
