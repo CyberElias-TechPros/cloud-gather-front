@@ -377,13 +377,13 @@ const DashboardPage = () => {
               
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/files">
+                  <Link to="/files">
                     <UploadIcon className="h-4 w-4 mr-2" />
                     Go to Files
                   </Link>
                 </Button>
                 <Button size="sm" asChild>
-                  <Link href="/providers">
+                  <Link to="/providers">
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Add Storage
                   </Link>

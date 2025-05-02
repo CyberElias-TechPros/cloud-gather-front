@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -159,14 +158,10 @@ const RegisterPage = () => {
     try {
       setIsLoading(true);
       
-      // Register the user with metadata
+      // Register the user with email and password only
       await register(
         registrationForm.email,
-        registrationForm.password,
-        {
-          name: registrationForm.name,
-          full_name: registrationForm.name,
-        }
+        registrationForm.password
       );
       
       // Registration successful - auth provider will handle redirecting

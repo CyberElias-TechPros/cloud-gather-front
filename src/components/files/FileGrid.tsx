@@ -7,6 +7,7 @@ export interface FileGridProps {
   files: FileItem[];
   view?: 'grid' | 'list';
   onFileClick?: (file: FileItem) => void;
+  onFileOpen?: (file: FileItem) => void; // Add this prop
   onStarClick?: (file: FileItem) => Promise<void>;
   onDeleteClick?: (file: FileItem) => Promise<void>;
   onShareClick?: (file: FileItem) => void;
@@ -17,6 +18,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
   files,
   view = 'list',
   onFileClick,
+  onFileOpen, // Make sure to include this
   onStarClick,
   onDeleteClick,
   onShareClick,
@@ -37,7 +39,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
           key={file.id}
           file={file}
           view={view}
-          onOpen={onFileClick}
+          onOpen={onFileOpen || onFileClick} // Use either prop
           onDownload={onDownloadClick}
           onShare={onShareClick}
           onDelete={onDeleteClick}

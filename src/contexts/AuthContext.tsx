@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
@@ -25,7 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  logout: () => Promise<void>; // Adding logout alias for signOut
+  logout: () => Promise<void>; // Alias for signOut
   register: (email: string, password: string) => Promise<{
     error: Error | null;
     data: { user: User | null; session: Session | null };

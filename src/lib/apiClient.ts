@@ -7,7 +7,7 @@ import { FileItem, ApiKey } from '@/types/file';
  */
 export class ApiClient {
   private apiKey: string | null = null;
-  private baseUrl: string;
+  public baseUrl: string; // Changed from private to public
 
   constructor(baseUrl: string = 'https://api.cloudunity.com') {
     this.baseUrl = baseUrl;
