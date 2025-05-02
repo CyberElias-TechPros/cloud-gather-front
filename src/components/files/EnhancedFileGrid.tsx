@@ -202,7 +202,7 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
           showUploadButton={true}
           onUploadComplete={loadFiles}
           currentFolderId={currentFolder?.id || null}
-          providerId={providerId}
+          providerId={providerId || null}
         />
       )}
       

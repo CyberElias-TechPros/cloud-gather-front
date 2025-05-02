@@ -1,111 +1,48 @@
 
 import React from 'react';
-import { FileCard } from './FileCard';
+import { FileCard } from '@/components/files/FileCard';
 import { FileItem } from '@/types/file';
 
-interface FileGridProps {
+export interface FileGridProps {
   files: FileItem[];
-  view: 'grid' | 'list';
-  onFileOpen?: (file: FileItem) => void;
-  onFileSelect?: (file: FileItem) => void;
-  onFileDownload?: (file: FileItem) => void;
-  onFileShare?: (file: FileItem) => void;
-  onFileRename?: (file: FileItem) => void;
-  onFileDelete?: (file: FileItem) => void;
-  onFileCopy?: (file: FileItem) => void;
-  onFileMove?: (file: FileItem) => void;
-  onFileDetails?: (file: FileItem) => void;
+  view?: 'grid' | 'list';
+  onFileClick?: (file: FileItem) => void;
+  onStarClick?: (file: FileItem) => Promise<void>;
+  onDeleteClick?: (file: FileItem) => Promise<void>;
+  onShareClick?: (file: FileItem) => void;
+  onDownloadClick?: (file: FileItem) => void;
 }
 
-export const FileGrid = ({
+export const FileGrid: React.FC<FileGridProps> = ({
   files,
-  view,
-  onFileOpen,
-  onFileSelect,
-  onFileDownload,
-  onFileShare,
-  onFileRename,
-  onFileDelete,
-  onFileCopy,
-  onFileMove,
-  onFileDetails
-}: FileGridProps) => {
+  view = 'list',
+  onFileClick,
+  onStarClick,
+  onDeleteClick,
+  onShareClick,
+  onDownloadClick,
+}) => {
   if (files.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-10 text-center">
-        <div className="text-muted-foreground mb-2">
-          <svg
-            className="mx-auto h-12 w-12"
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-            <path d="M13 2v7h7" />
-          </svg>
-        </div>
-        <h3 className="text-lg font-medium">No files found</h3>
-        <p className="text-muted-foreground mt-1">
-          Upload files or create a new folder to get started.
-        </p>
-      </div>
-    );
-  }
-
-  if (view === 'grid') {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {files.map((file) => (
-          <FileCard 
-            key={file.id} 
-            file={file} 
-            view={view}
-            onOpen={onFileOpen}
-            onSelect={onFileSelect}
-            onDownload={onFileDownload}
-            onShare={onFileShare}
-            onRename={onFileRename}
-            onDelete={onFileDelete}
-            onCopy={onFileCopy}
-            onMove={onFileMove}
-            onDetails={onFileDetails}
-          />
-        ))}
+      <div className="text-center py-8 text-muted-foreground">
+        No files found
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-border rounded-md border">
-      <div className="bg-muted/50 px-4 py-3 text-sm font-medium flex">
-        <div className="flex-1">Name</div>
-        <div className="w-1/5 hidden md:block">Provider</div>
-        <div className="w-24 text-right">Actions</div>
-      </div>
-      <div>
-        {files.map((file) => (
-          <FileCard 
-            key={file.id} 
-            file={file} 
-            view={view}
-            onOpen={onFileOpen}
-            onSelect={onFileSelect}
-            onDownload={onFileDownload}
-            onShare={onFileShare}
-            onRename={onFileRename}
-            onDelete={onFileDelete}
-            onCopy={onFileCopy}
-            onMove={onFileMove}
-            onDetails={onFileDetails}
-          />
-        ))}
-      </div>
+    <div className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'divide-y'}>
+      {files.map((file) => (
+        <FileCard
+          key={file.id}
+          file={file}
+          view={view}
+          onOpen={onFileClick}
+          onDownload={onDownloadClick}
+          onShare={onShareClick}
+          onDelete={onDeleteClick}
+        />
+      ))}
     </div>
   );
 };

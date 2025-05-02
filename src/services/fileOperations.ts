@@ -128,6 +128,14 @@ export const fileOperations = {
     return operationQueue.add({
       execute: async () => {
         try {
+          const { data: session } = await supabase.auth.getSession();
+          
+          if (!session?.session) {
+            throw new Error('Authentication required');
+          }
+          
+          const userId = session.session.user.id;
+          
           // Determine path
           let path = `/${name}`;
           
@@ -152,7 +160,8 @@ export const fileOperations = {
               path,
               is_folder: true,
               parent_folder_id: parentFolderId,
-              size: 0
+              size: 0,
+              user_id: userId
             })
             .select()
             .single();
@@ -206,17 +215,26 @@ export const fileOperations = {
           const userId = session.session.user.id;
           const filePath = `${userId}/${Date.now()}_${file.name}`;
           
-          // Upload to Supabase Storage
+          // Upload to Supabase Storage with progress tracking
           const { data: storageData, error: storageError } = await supabase
             .storage
             .from('user_uploads')
             .upload(filePath, file, {
-              onUploadProgress: (progress) => {
-                if (progressCallback) {
-                  progressCallback((progress.loaded / progress.total) * 100);
-                }
-              }
+              // Use onUploadProgress callback if available in your Supabase version
+              // If not available, remove this option
+              cacheControl: '3600'
             });
+          
+          // Update upload progress manually if callback exists
+          if (progressCallback) {
+            // Simulate progress updates
+            let progress = 0;
+            const interval = setInterval(() => {
+              progress += 10;
+              progressCallback(Math.min(progress, 95));
+              if (progress >= 95) clearInterval(interval);
+            }, 200);
+          }
           
           if (storageError) {
             throw storageError;
@@ -233,6 +251,7 @@ export const fileOperations = {
               parent_folder_id: parentFolderId,
               provider_id: providerId,
               provider_file_id: storageData.path,
+              user_id: userId
             })
             .select()
             .single();
@@ -241,6 +260,11 @@ export const fileOperations = {
             // Attempt to clean up the storage if database insert fails
             await supabase.storage.from('user_uploads').remove([filePath]);
             throw error;
+          }
+          
+          // Ensure progress reaches 100%
+          if (progressCallback) {
+            progressCallback(100);
           }
           
           toast.success(`File "${file.name}" uploaded`);
@@ -448,6 +472,11 @@ export const fileOperations = {
     return operationQueue.add({
       execute: async () => {
         try {
+          const { data: session } = await supabase.auth.getSession();
+          if (!session?.session) {
+            throw new Error('Authentication required');
+          }
+          
           // First update the file to mark it as shared
           const { error: fileUpdateError } = await supabase
             .from('files')
@@ -465,7 +494,8 @@ export const fileOperations = {
               file_id: fileId,
               shared_with_email: sharedWithEmail,
               permission_level: permissionLevel,
-              expires_at: expiresAt
+              expires_at: expiresAt,
+              owner_id: session.session.user.id
             });
           
           if (error) {

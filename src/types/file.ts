@@ -35,10 +35,12 @@ export interface FileShare {
   expires_at?: string | null;
 }
 
+export type StorageProviderType = 'google-drive' | 'dropbox' | 'onedrive' | 'box' | 'amazon-s3' | 'backblaze' | 'mega' | 'pcloud' | 'yandex-disk' | 'icedrive' | 'sync' | 'add';
+
 export interface StorageProviderInfo {
   id: string;
   name: string;
-  type: 'google-drive' | 'dropbox' | 'onedrive' | 'box' | 'amazon-s3' | 'backblaze' | 'mega' | 'pcloud' | 'yandex-disk' | 'icedrive' | 'sync' | 'add';
+  type: StorageProviderType;
   description?: string;
   status?: 'connected' | 'disconnected' | 'error';
   totalSpace?: number;
@@ -80,35 +82,42 @@ export const getProviderDisplayName = (providerName: string): string => {
   return nameMap[providerName] || providerName.charAt(0).toUpperCase() + providerName.slice(1);
 };
 
-// Instead of using JSX in a .ts file, use a string representation or import from the icons component
-export const getProviderIcon = (providerType: string): React.FC<{ className?: string }> => {
-  // Import icons from the provider-icons component which already has the SVGs defined
-  switch (providerType) {
-    case 'google-drive':
-      return require('../components/icons/provider-icons').GoogleDriveIcon;
-    case 'dropbox':
-      return require('../components/icons/provider-icons').DropboxIcon;
-    case 'onedrive':
-      return require('../components/icons/provider-icons').OneDriveIcon;
-    case 'box':
-      return require('../components/icons/provider-icons').BoxIcon;
-    case 'amazon-s3':
-      return require('../components/icons/provider-icons').AmazonS3Icon;
-    case 'backblaze':
-      return require('../components/icons/provider-icons').BackblazeIcon;
-    case 'mega':
-      return require('../components/icons/provider-icons').MegaIcon;
-    case 'pcloud':
-      return require('../components/icons/provider-icons').PCloudIcon;
-    case 'yandex-disk':
-      return require('../components/icons/provider-icons').YandexDiskIcon;
-    case 'icedrive':
-      return require('../components/icons/provider-icons').IcedriveIcon;
-    case 'sync':
-      return require('../components/icons/provider-icons').SyncIcon;
-    default:
-      // Default icon for unknown provider types
-      const DefaultIcon = require('../components/icons/provider-icons').BoxIcon;
-      return DefaultIcon;
+// Use a string representation instead of JSX in a .ts file
+export const getProviderIcon = (providerType: string) => {
+  try {
+    // Import icons from the provider-icons component
+    const icons = require('../components/icons/provider-icons');
+    
+    switch (providerType) {
+      case 'google-drive':
+        return icons.GoogleDriveIcon;
+      case 'dropbox':
+        return icons.DropboxIcon;
+      case 'onedrive':
+        return icons.OneDriveIcon;
+      case 'box':
+        return icons.BoxIcon;
+      case 'amazon-s3':
+        return icons.AmazonS3Icon;
+      case 'backblaze':
+        return icons.BackblazeIcon;
+      case 'mega':
+        return icons.MegaIcon;
+      case 'pcloud':
+        return icons.PCloudIcon;
+      case 'yandex-disk':
+        return icons.YandexDiskIcon;
+      case 'icedrive':
+        return icons.IcedriveIcon;
+      case 'sync':
+        return icons.SyncIcon;
+      default:
+        // Default icon for unknown provider types
+        return icons.BoxIcon;
+    }
+  } catch (error) {
+    console.error("Error loading provider icons:", error);
+    // Return a simple function component as fallback
+    return () => null;
   }
 };

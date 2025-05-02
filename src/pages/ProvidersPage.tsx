@@ -16,7 +16,7 @@ import { ConnectProviderDialog } from '@/components/providers/ConnectProviderDia
 import { ProviderCard } from '@/components/providers/ProviderCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, PlusCircle, Loader2 } from 'lucide-react';
-import { StorageProviderInfo } from '@/types/file';
+import { StorageProviderInfo, StorageProviderType } from '@/types/file';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -31,7 +31,7 @@ const ProvidersPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<StorageProviderInfo | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const allProviderTypes = [
+  const allProviderTypes: {type: StorageProviderType; name: string; description: string}[] = [
     { type: 'google-drive', name: 'Google Drive', description: 'Connect your Google Drive account' },
     { type: 'dropbox', name: 'Dropbox', description: 'Connect your Dropbox account' },
     { type: 'onedrive', name: 'OneDrive', description: 'Connect your Microsoft OneDrive account' },
@@ -73,7 +73,7 @@ const ProvidersPage = () => {
       const connectedProvidersList: StorageProviderInfo[] = data.map(provider => ({
         id: provider.id,
         name: provider.provider_name,
-        type: provider.provider_name as StorageProviderInfo['type'],
+        type: provider.provider_name as StorageProviderType,
         status: provider.status as 'connected' | 'disconnected' | 'error',
         totalSpace: provider.total_space || 0,
         usedSpace: provider.used_space || 0,
@@ -99,15 +99,15 @@ const ProvidersPage = () => {
     }
   };
 
-  const handleConnectProvider = (provider: StorageProviderInfo) => {
+  const handleConnectProvider = async (provider: StorageProviderInfo) => {
     setSelectedProvider(provider);
     setConnectDialogOpen(true);
   };
 
-  const handleProviderConnected = () => {
+  const handleProviderConnected = async () => {
     setConnectDialogOpen(false);
     setSelectedProvider(null);
-    loadProviders();
+    await loadProviders();
     toast.success('Provider connected successfully');
   };
 
@@ -122,7 +122,7 @@ const ProvidersPage = () => {
         throw error;
       }
       
-      loadProviders();
+      await loadProviders();
       toast.success(`${provider.name} disconnected`);
     } catch (error) {
       console.error('Error disconnecting provider:', error);
@@ -159,7 +159,7 @@ const ProvidersPage = () => {
       
       await Promise.all(updates);
       
-      loadProviders();
+      await loadProviders();
     } catch (error) {
       console.error('Error updating provider priority:', error);
       toast.error('Failed to update priority');
@@ -229,7 +229,12 @@ const ProvidersPage = () => {
                       <p className="text-muted-foreground mb-4">
                         Connect your cloud storage providers to get started.
                       </p>
-                      <Button onClick={() => document.querySelector('[data-state="available"]')?.click()}>
+                      <Button onClick={() => {
+                        const availableTab = document.querySelector('[data-value="available"]');
+                        if (availableTab instanceof HTMLElement) {
+                          availableTab.click();
+                        }
+                      }}>
                         <PlusCircle className="h-4 w-4 mr-2" />
                         Add Provider
                       </Button>

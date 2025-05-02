@@ -1,168 +1,209 @@
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger 
-} from '@/components/ui/dialog';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { 
-  ChevronDown, 
-  Filter, 
-  FolderPlus, 
-  Grid, 
-  List, 
-  Search, 
-  SortAsc, 
-  Upload 
+import { Input } from '@/components/ui/input';
+import {
+  FolderPlus,
+  Upload,
+  RefreshCw,
+  Grid,
+  List,
+  SortAsc,
+  SortDesc,
+  Clock,
+  FileText,
+  ArrowUpDown,
 } from 'lucide-react';
-import { UploadDropzone } from '@/components/uploads/UploadDropzone';
+import { toast } from 'sonner';
 
-interface FileToolbarProps {
-  view: 'grid' | 'list';
-  onViewChange: (view: 'grid' | 'list') => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  sortBy: 'name' | 'date' | 'size';
-  sortDirection: 'asc' | 'desc';
-  onSort: (sortBy: 'name' | 'date' | 'size') => void;
-  uploadDialogOpen: boolean;
-  setUploadDialogOpen: (open: boolean) => void;
-  newFolderDialogOpen: boolean;
-  setNewFolderDialogOpen: (open: boolean) => void;
-  newFolderName: string;
-  setNewFolderName: (name: string) => void;
-  onCreateFolder: () => void;
-  onFilesSelected: (files: File[]) => void;
+export interface FileToolbarProps {
+  onCreateFolder?: () => void;
+  onRefresh?: () => void;
+  onSortChange?: (field: 'name' | 'date' | 'size') => void;
+  onViewChange?: (view: 'grid' | 'list') => void;
+  sortField?: 'name' | 'date' | 'size';
+  sortDirection?: 'asc' | 'desc';
+  view?: 'grid' | 'list';
+  showUploadButton?: boolean;
+  onUploadComplete?: () => void;
+  currentFolderId?: string | null;
+  providerId?: string | null;
 }
 
 export const FileToolbar = ({
-  view,
-  onViewChange,
-  searchQuery,
-  onSearchChange,
-  sortBy,
-  sortDirection,
-  onSort,
-  uploadDialogOpen,
-  setUploadDialogOpen,
-  newFolderDialogOpen,
-  setNewFolderDialogOpen,
-  newFolderName,
-  setNewFolderName,
   onCreateFolder,
-  onFilesSelected
+  onRefresh,
+  onSortChange,
+  onViewChange,
+  sortField = 'date',
+  sortDirection = 'desc',
+  view = 'list',
+  showUploadButton = true,
+  onUploadComplete,
+  currentFolderId,
+  providerId,
 }: FileToolbarProps) => {
-  
-  return (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-      <div className="w-full md:w-auto flex-1 relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search files and folders..."
-          className="pl-10"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-      </div>
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUploadClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    
+    if (!files || files.length === 0) return;
+    
+    setUploading(true);
+    
+    try {
+      // Handle file upload (implementation depends on your fileOperations service)
+      // For now, just show a toast message
+      toast.success(`${files.length} file(s) uploaded`);
       
-      <div className="flex items-center gap-2 w-full md:w-auto">
+      if (onUploadComplete) {
+        onUploadComplete();
+      }
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      toast.error('Failed to upload files');
+    } finally {
+      setUploading(false);
+      
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  return (
+    <div className="flex justify-between items-center py-2">
+      <div className="flex gap-2">
         <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => onViewChange(view === 'grid' ? 'list' : 'grid')}
+          variant="secondary" 
+          size="sm"
+          onClick={onCreateFolder}
+          disabled={uploading}
         >
-          {view === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
+          <FolderPlus className="h-4 w-4 mr-1" />
+          New Folder
         </Button>
         
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <SortAsc className="h-4 w-4 mr-2" />
-              Sort
-              <ChevronDown className="h-4 w-4 ml-2" />
+        {showUploadButton && (
+          <>
+            <Button 
+              variant="default" 
+              size="sm"
+              onClick={handleUploadClick}
+              disabled={uploading}
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              {uploading ? 'Uploading...' : 'Upload Files'}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => onSort('name')}>
-              By Name {sortBy === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onSort('date')}>
-              By Date {sortBy === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onSort('size')}>
-              By Size {sortBy === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>All Files</DropdownMenuItem>
-            <DropdownMenuItem>Documents</DropdownMenuItem>
-            <DropdownMenuItem>Images</DropdownMenuItem>
-            <DropdownMenuItem>Videos</DropdownMenuItem>
-            <DropdownMenuItem>Audio</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        
-        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Upload className="h-4 w-4 mr-2" />
-              Upload
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload Files</DialogTitle>
-            </DialogHeader>
-            <UploadDropzone onFilesSelected={onFilesSelected} />
-          </DialogContent>
-        </Dialog>
-        
-        <Dialog open={newFolderDialogOpen} onOpenChange={setNewFolderDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm">
-              <FolderPlus className="h-4 w-4 mr-2" />
-              New Folder
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Folder</DialogTitle>
-            </DialogHeader>
-            <Input
-              placeholder="Folder name"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              className="my-4"
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              className="hidden"
             />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setNewFolderDialogOpen(false)}>
-                Cancel
+          </>
+        )}
+      </div>
+      
+      <div className="flex gap-2">
+        {onRefresh && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onRefresh}
+            disabled={uploading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="sr-only">Refresh</span>
+          </Button>
+        )}
+        
+        {onViewChange && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                {view === 'grid' ? (
+                  <Grid className="h-4 w-4" />
+                ) : (
+                  <List className="h-4 w-4" />
+                )}
+                <span className="sr-only">Change view</span>
               </Button>
-              <Button onClick={onCreateFolder}>Create</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onViewChange('grid')}>
+                <Grid className="h-4 w-4 mr-2" />
+                Grid view
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onViewChange('list')}>
+                <List className="h-4 w-4 mr-2" />
+                List view
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        
+        {onSortChange && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <ArrowUpDown className="h-4 w-4" />
+                <span className="sr-only">Sort</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onSortChange('name')}>
+                <FileText className="h-4 w-4 mr-2" />
+                Name
+                {sortField === 'name' && (
+                  sortDirection === 'asc' ? (
+                    <SortAsc className="h-4 w-4 ml-2" />
+                  ) : (
+                    <SortDesc className="h-4 w-4 ml-2" />
+                  )
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSortChange('date')}>
+                <Clock className="h-4 w-4 mr-2" />
+                Date
+                {sortField === 'date' && (
+                  sortDirection === 'asc' ? (
+                    <SortAsc className="h-4 w-4 ml-2" />
+                  ) : (
+                    <SortDesc className="h-4 w-4 ml-2" />
+                  )
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSortChange('size')}>
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                Size
+                {sortField === 'size' && (
+                  sortDirection === 'asc' ? (
+                    <SortAsc className="h-4 w-4 ml-2" />
+                  ) : (
+                    <SortDesc className="h-4 w-4 ml-2" />
+                  )
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </div>
   );

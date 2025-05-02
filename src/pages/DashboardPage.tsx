@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StorageOverview } from '@/components/dashboard/StorageOverview';
 import { ActivityFeed, ActivityItem } from '@/components/dashboard/ActivityFeed';
@@ -15,7 +15,6 @@ import { fileOperations } from '@/services/fileOperations';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import Link from 'next/link';
 
 const DashboardPage = () => {
   const { user, loading: authLoading } = useAuth();
