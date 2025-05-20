@@ -191,7 +191,7 @@ const ProvidersPage = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-md"
-              prefix={<Search className="h-4 w-4 text-muted-foreground mr-2" />}
+              prefix={<Search className="h-4 w-4 text-muted-foreground" />}
             />
           </div>
           <Button>
