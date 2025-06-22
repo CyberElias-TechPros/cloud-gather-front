@@ -37,7 +37,7 @@ const LandingPage = () => {
             <Link to="/auth">
               <Button variant="outline">Login</Button>
             </Link>
-            <Link to="/auth?signup=true">
+            <Link to="/auth">
               <Button>Sign Up</Button>
             </Link>
           </div>
@@ -55,7 +55,7 @@ const LandingPage = () => {
           No more switching between apps or losing track of your files.
         </p>
         <div className="flex justify-center gap-4">
-          <Link to="/auth?signup=true">
+          <Link to="/auth">
             <Button size="lg" className="px-8">Get Started</Button>
           </Link>
           <a href="#features">
@@ -244,7 +244,7 @@ const LandingPage = () => {
             Join thousands of users who have streamlined their file management with CloudUnity.
             Get started for free today!
           </p>
-          <Link to="/auth?signup=true">
+          <Link to="/auth">
             <Button variant="secondary" size="lg" className="px-8">
               Create Free Account
             </Button>
@@ -282,7 +282,7 @@ const LandingPage = () => {
               <ul className="space-y-2">
                 <li><a href="#features" className="text-muted-foreground hover:text-foreground">Features</a></li>
                 <li><a href="#providers" className="text-muted-foreground hover:text-foreground">Providers</a></li>
-                <li><a href="#pricing" className="text-muted-foreground hover:text-foreground">Pricing</a></li>
+                <li><Link to="/auth" className="text-muted-foreground hover:text-foreground">Get Started</Link></li>
                 <li><a href="#faq" className="text-muted-foreground hover:text-foreground">FAQ</a></li>
               </ul>
             </div>
@@ -292,7 +292,6 @@ const LandingPage = () => {
               <ul className="space-y-2">
                 <li><Link to="/about" className="text-muted-foreground hover:text-foreground">About</Link></li>
                 <li><Link to="/blog" className="text-muted-foreground hover:text-foreground">Blog</Link></li>
-                <li><Link to="/careers" className="text-muted-foreground hover:text-foreground">Careers</Link></li>
                 <li><Link to="/contact" className="text-muted-foreground hover:text-foreground">Contact</Link></li>
               </ul>
             </div>
@@ -302,18 +301,18 @@ const LandingPage = () => {
               <ul className="space-y-2">
                 <li><Link to="/privacy" className="text-muted-foreground hover:text-foreground">Privacy</Link></li>
                 <li><Link to="/terms" className="text-muted-foreground hover:text-foreground">Terms</Link></li>
-                <li><Link to="/security" className="text-muted-foreground hover:text-foreground">Security</Link></li>
+                <li><Link to="/auth" className="text-muted-foreground hover:text-foreground">Login</Link></li>
               </ul>
             </div>
           </div>
           
           <div className="border-t mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-muted-foreground">© 2023 CloudUnity. All rights reserved.</p>
+            <p className="text-muted-foreground">© 2024 CloudUnity. All rights reserved.</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <a href="#" className="text-muted-foreground hover:text-foreground">
                 <span className="sr-only">Twitter</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-                  <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-1-4.8 4-8.9 9-5.8 1.7-1 3-2.2 4-3.1z"></path>
+                  <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.1-4.8 4-8.9 9-5.8 1.7-1 3-2.2 4-3.1z"></path>
                 </svg>
               </a>
               <a href="#" className="text-muted-foreground hover:text-foreground">

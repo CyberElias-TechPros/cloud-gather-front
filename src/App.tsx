@@ -12,17 +12,24 @@ import APIDocs from "./pages/APIDocs";
 import RecentsPage from "./pages/RecentsPage";
 import TeamPage from "./pages/TeamPage";
 import AuthPage from "./pages/AuthPage";
+import LandingPage from "./pages/LandingPage";
+import AdminPage from "./pages/AdminPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import AdminRoute from "./components/auth/AdminRoute";
 
 const router = createBrowserRouter([
   {
     path: "/",
+    element: <LandingPage />,
+    errorElement: <ErrorPage />,
+  },
+  {
+    path: "/dashboard",
     element: (
       <ProtectedRoute>
         <DashboardPage />
       </ProtectedRoute>
     ),
-    errorElement: <ErrorPage />,
   },
   {
     path: "/login",
@@ -90,6 +97,14 @@ const router = createBrowserRouter([
       <ProtectedRoute>
         <TeamPage />
       </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/admin",
+    element: (
+      <AdminRoute>
+        <AdminPage />
+      </AdminRoute>
     ),
   },
 ]);

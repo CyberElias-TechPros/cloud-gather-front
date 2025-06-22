@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StorageOverview } from '@/components/dashboard/StorageOverview';
-import { ActivityFeed, ActivityItem } from '@/components/dashboard/ActivityFeed';
+import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EnhancedFileGrid } from '@/components/files/EnhancedFileGrid';
@@ -21,7 +22,6 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [recentFiles, setRecentFiles] = useState<FileItem[]>([]);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
   
   const [storageData, setStorageData] = useState<{
     totalSpace: number;
@@ -42,8 +42,8 @@ const DashboardPage = () => {
     if (authLoading) return;
     
     if (!user) {
-      // Redirect to login if not authenticated
-      window.location.href = '/login';
+      // Redirect to auth if not authenticated
+      window.location.href = '/auth';
       return;
     }
     
@@ -64,38 +64,11 @@ const DashboardPage = () => {
   }, [user, authLoading]);
 
   const handleFileActivity = (payload: any) => {
-    const fileData = payload.new;
-    
-    if (!fileData) return;
-    
-    let activityType: 'upload' | 'edit' | 'share' | 'delete' | 'download' = 'edit';
-    
-    switch (payload.eventType) {
-      case 'INSERT':
-        activityType = 'upload';
-        break;
-      case 'UPDATE':
-        if (payload.new.is_shared && !payload.old.is_shared) {
-          activityType = 'share';
-        } else if (payload.new.last_accessed_at !== payload.old.last_accessed_at) {
-          activityType = 'download';
-        } else {
-          activityType = 'edit';
-        }
-        break;
-      case 'DELETE':
-        activityType = 'delete';
-        break;
+    // File activity is now handled by the ActivityFeed component
+    // We just need to refresh the recent files
+    if (payload.eventType === 'INSERT') {
+      loadRecentFiles();
     }
-    
-    const newActivity: ActivityItem = {
-      id: `activity-${Date.now()}`,
-      type: activityType,
-      fileName: fileData.filename,
-      timestamp: new Date()
-    };
-    
-    setActivities(prev => [newActivity, ...prev.slice(0, 9)]);
   };
 
   const loadDashboardData = async () => {
@@ -109,34 +82,6 @@ const DashboardPage = () => {
       // Fetch recent files
       const files = await fetchRecentFiles(10);
       setRecentFiles(files);
-      
-      // Generate some sample activities if none exist yet
-      setActivities([
-        {
-          id: '1',
-          type: 'upload',
-          fileName: 'Project Presentation.pptx',
-          timestamp: new Date(Date.now() - 1000 * 60 * 30) // 30 minutes ago
-        },
-        {
-          id: '2',
-          type: 'share',
-          fileName: 'Budget 2023.xlsx',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) // 2 hours ago
-        },
-        {
-          id: '3',
-          type: 'edit',
-          fileName: 'Meeting Notes.docx',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5) // 5 hours ago
-        },
-        {
-          id: '4',
-          type: 'download',
-          fileName: 'Company Logo.png',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) // 1 day ago
-        }
-      ]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast.error('Failed to load dashboard data');
@@ -189,6 +134,7 @@ const DashboardPage = () => {
       const { data, error } = await supabase
         .from('files')
         .select('*')
+        .eq('user_id', user!.id)
         .order('last_accessed_at', { ascending: false })
         .limit(limit);
       
@@ -200,6 +146,15 @@ const DashboardPage = () => {
     } catch (error) {
       console.error('Error fetching recent files:', error);
       return [];
+    }
+  };
+
+  const loadRecentFiles = async () => {
+    try {
+      const files = await fetchRecentFiles(10);
+      setRecentFiles(files);
+    } catch (error) {
+      console.error('Error loading recent files:', error);
     }
   };
   
@@ -343,7 +298,7 @@ const DashboardPage = () => {
               <StorageOverview storageData={storageData} />
             </div>
             <div>
-              <ActivityFeed activities={activities} />
+              <ActivityFeed />
             </div>
           </div>
           
