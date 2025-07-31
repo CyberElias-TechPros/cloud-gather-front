@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FileItem } from '@/types/file';
-import { enhancedFileOperations } from '@/services/enhancedFileOperations';
+import { simpleFileOperations } from '@/services/simpleFileOperations';
 import { useMonitoring } from '@/hooks/useMonitoring';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -72,13 +72,13 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
     setLoading(true);
     const { data, error } = await handleAsyncError(
       () => measurePerformance('load_files', () =>
-        enhancedFileOperations.listFiles(parentFolderId, providerId, sortBy, sortDirection)
+        simpleFileOperations.listFiles(parentFolderId, providerId, sortBy, sortDirection)
       ),
       { operation: 'loadFiles', parentFolderId, providerId }
     );
 
-    if (data) {
-      setFiles(data);
+    if (data?.data) {
+      setFiles(data.data);
       recordActivity('files_loaded', 'file', undefined, true);
     }
     setLoading(false);
@@ -116,7 +116,7 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
 
     const uploadPromises = Array.from(fileList).map(async (file) => {
       const { data, error } = await handleAsyncError(
-        () => enhancedFileOperations.uploadFile(
+        () => simpleFileOperations.uploadFile(
           file,
           parentFolderId,
           providerId,
@@ -129,12 +129,12 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
         { operation: 'uploadFile', fileName: file.name }
       );
 
-      if (data) {
-        recordActivity('file_uploaded', 'file', data.id, true);
+      if (data?.data) {
+        recordActivity('file_uploaded', 'file', data.data.id, true);
         toast.success(`${file.name} uploaded successfully`, {
           id: `upload_${file.name}`,
         });
-        return data;
+        return data.data;
       }
       return null;
     });
@@ -155,13 +155,13 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
     if (!name || !name.trim()) return;
 
     const { data, error } = await handleAsyncError(
-      () => enhancedFileOperations.createFolder(name.trim(), parentFolderId),
+      () => simpleFileOperations.createFolder(name.trim(), parentFolderId),
       { operation: 'createFolder', folderName: name }
     );
 
-    if (data) {
-      setFiles(prev => [data, ...prev]);
-      recordActivity('folder_created', 'folder', data.id, true);
+    if (data?.data) {
+      setFiles(prev => [data.data, ...prev]);
+      recordActivity('folder_created', 'folder', data.data.id, true);
     }
   }, [parentFolderId, handleAsyncError, recordActivity]);
 
@@ -183,7 +183,7 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
 
     const deletePromises = filesToDelete.map(async (file) => {
       const { error } = await handleAsyncError(
-        () => enhancedFileOperations.deleteFile(file),
+        () => simpleFileOperations.deleteFile(file),
         { operation: 'deleteFile', fileId: file.id, fileName: file.filename }
       );
 
@@ -211,13 +211,13 @@ export const EnhancedFileGrid: React.FC<EnhancedFileGridProps> = ({
     if (file.is_folder) return;
 
     const { data, error } = await handleAsyncError(
-      () => enhancedFileOperations.getFileContent(file.id),
+      () => simpleFileOperations.getFileContent(file.id),
       { operation: 'downloadFile', fileId: file.id, fileName: file.filename }
     );
 
-    if (data) {
+    if (data?.data) {
       // Create download link
-      const url = URL.createObjectURL(data.content);
+      const url = URL.createObjectURL(data.data.content);
       const a = document.createElement('a');
       a.href = url;
       a.download = file.filename;

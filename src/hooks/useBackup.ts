@@ -1,6 +1,6 @@
 
 import { useState, useCallback } from 'react';
-import { backupService, BackupMetadata, RestoreOptions } from '@/services/backupService';
+import { backupService, BackupMetadata, RestoreOptions } from '@/services/mockBackupService';
 import { useErrorHandler } from './useErrorHandler';
 import { toast } from 'sonner';
 

@@ -1,6 +1,6 @@
 
 import { useEffect, useCallback } from 'react';
-import { monitoringService, PerformanceMetric, UserActivity } from '@/services/monitoringService';
+import { monitoringService, PerformanceMetric, UserActivity } from '@/services/mockMonitoringService';
 import { useLocation } from 'react-router-dom';
 
 export const useMonitoring = () => {
@@ -9,7 +9,6 @@ export const useMonitoring = () => {
   // Record page views
   useEffect(() => {
     const pageName = location.pathname;
-    monitoringService.recordPageLoad(pageName);
     monitoringService.recordActivity('page_view', 'page', pageName);
   }, [location]);
 
@@ -26,9 +25,9 @@ export const useMonitoring = () => {
     resourceType: string,
     resourceId?: string,
     success: boolean = true,
-    errorMessage?: string
+    metadata?: Record<string, any>
   ) => {
-    await monitoringService.recordActivity(action, resourceType, resourceId, success, errorMessage);
+    await monitoringService.recordActivity(action, resourceType, resourceId, success, metadata);
   }, []);
 
   const measurePerformance = useCallback(async <T>(

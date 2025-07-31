@@ -38,7 +38,7 @@ export const profileUpdateSchema = z.object({
 // Provider connection schemas
 export const providerConnectionSchema = z.object({
   providerName: z.string().min(1, 'Provider name is required'),
-  credentials: z.record(z.any()).refine(
+  credentials: z.record(z.string(), z.any()).refine(
     (data) => Object.keys(data).length > 0,
     'Credentials are required'
   ),

@@ -139,11 +139,11 @@ function App() {
 
     // Global error handler for unhandled errors
     const handleError = (event: ErrorEvent) => {
-      recordActivity('unhandled_error', 'error', event.filename, false, event.message);
+      recordActivity('unhandled_error', 'error', event.filename, false, { message: event.message });
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
-      recordActivity('unhandled_promise_rejection', 'error', undefined, false, event.reason?.toString());
+      recordActivity('unhandled_promise_rejection', 'error', undefined, false, { reason: event.reason?.toString() });
     };
 
     window.addEventListener('error', handleError);

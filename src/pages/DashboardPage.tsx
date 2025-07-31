@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useMonitoring } from '@/hooks/useMonitoring';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { enhancedFileOperations } from '@/services/enhancedFileOperations';
+// Note: File operations are handled directly with Supabase queries for now
 import { toast } from 'sonner';
 import {
   Files,
