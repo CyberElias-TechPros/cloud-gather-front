@@ -1,5 +1,7 @@
 
+import React, { useEffect } from 'react';
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
+import { useMonitoring } from '@/hooks/useMonitoring';
 import ErrorPage from "./pages/ErrorPage";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -16,6 +18,7 @@ import LandingPage from "./pages/LandingPage";
 import AdminPage from "./pages/AdminPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AdminRoute from "./components/auth/AdminRoute";
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 const router = createBrowserRouter([
   {
@@ -27,7 +30,9 @@ const router = createBrowserRouter([
     path: "/dashboard",
     element: (
       <ProtectedRoute>
-        <DashboardPage />
+        <ErrorBoundary>
+          <DashboardPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -47,7 +52,9 @@ const router = createBrowserRouter([
     path: "/storage",
     element: (
       <ProtectedRoute>
-        <StoragePage />
+        <ErrorBoundary>
+          <StoragePage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -55,7 +62,9 @@ const router = createBrowserRouter([
     path: "/files",
     element: (
       <ProtectedRoute>
-        <FilesPage />
+        <ErrorBoundary>
+          <FilesPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -63,7 +72,9 @@ const router = createBrowserRouter([
     path: "/settings",
     element: (
       <ProtectedRoute>
-        <SettingsPage />
+        <ErrorBoundary>
+          <SettingsPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -71,7 +82,9 @@ const router = createBrowserRouter([
     path: "/providers",
     element: (
       <ProtectedRoute>
-        <ProvidersPage />
+        <ErrorBoundary>
+          <ProvidersPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -79,7 +92,9 @@ const router = createBrowserRouter([
     path: "/api-docs",
     element: (
       <ProtectedRoute>
-        <APIDocs />
+        <ErrorBoundary>
+          <APIDocs />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -87,7 +102,9 @@ const router = createBrowserRouter([
     path: "/recents",
     element: (
       <ProtectedRoute>
-        <RecentsPage />
+        <ErrorBoundary>
+          <RecentsPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -95,7 +112,9 @@ const router = createBrowserRouter([
     path: "/team",
     element: (
       <ProtectedRoute>
-        <TeamPage />
+        <ErrorBoundary>
+          <TeamPage />
+        </ErrorBoundary>
       </ProtectedRoute>
     ),
   },
@@ -103,13 +122,39 @@ const router = createBrowserRouter([
     path: "/admin",
     element: (
       <AdminRoute>
-        <AdminPage />
+        <ErrorBoundary>
+          <AdminPage />
+        </ErrorBoundary>
       </AdminRoute>
     ),
   },
 ]);
 
 function App() {
+  const { recordActivity } = useMonitoring();
+
+  useEffect(() => {
+    // Record app initialization
+    recordActivity('app_init', 'application');
+
+    // Global error handler for unhandled errors
+    const handleError = (event: ErrorEvent) => {
+      recordActivity('unhandled_error', 'error', event.filename, false, event.message);
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      recordActivity('unhandled_promise_rejection', 'error', undefined, false, event.reason?.toString());
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, [recordActivity]);
+
   return <RouterProvider router={router} />;
 }
 

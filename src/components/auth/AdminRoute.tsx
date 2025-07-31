@@ -1,69 +1,54 @@
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
 interface AdminRouteProps {
   children: React.ReactNode;
+  redirectTo?: string;
 }
 
-const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+const AdminRoute: React.FC<AdminRouteProps> = ({ 
+  children, 
+  redirectTo = '/dashboard'
+}) => {
   const { user, loading: authLoading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (authLoading) return;
+  // Check if user is admin
+  const { data: isAdmin, isLoading: adminLoading } = useQuery({
+    queryKey: ['admin-check', user?.id],
+    queryFn: async () => {
+      if (!user?.email) return false;
       
-      if (!user) {
-        window.location.href = '/auth';
-        return;
-      }
+      const { data, error } = await supabase
+        .from('admin_users')
+        .select('id')
+        .eq('email', user.email)
+        .single();
 
-      try {
-        // Check if user is admin by email
-        const { data, error } = await supabase
-          .from('admin_users')
-          .select('email')
-          .eq('email', user.email)
-          .single();
+      return !error && !!data;
+    },
+    enabled: !!user?.email,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-        if (error && error.code !== 'PGRST116') {
-          throw error;
-        }
-
-        setIsAdmin(!!data);
-        
-        if (!data) {
-          toast.error('Access denied. Admin privileges required.');
-          window.location.href = '/dashboard';
-        }
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        toast.error('Error verifying admin access');
-        window.location.href = '/dashboard';
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAdminStatus();
-  }, [user, authLoading]);
-
-  if (authLoading || loading) {
+  if (authLoading || adminLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Verifying admin access...</span>
+      <div className="flex justify-center items-center h-screen">
+        <LoadingSpinner size="lg" text="Checking permissions..." />
       </div>
     );
   }
 
-  if (!user || !isAdmin) {
-    return null;
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (!isAdmin) {
+    return <Navigate to={redirectTo} replace />;
   }
 
   return <>{children}</>;

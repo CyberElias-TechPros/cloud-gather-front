@@ -1,13 +1,16 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { FileItem, ApiKey } from '@/types/file';
+import { errorHandler, ErrorCode } from '@/lib/error/ErrorHandler';
+import { RateLimiter } from '@/lib/security/rateLimiter';
+
+const rateLimiter = new RateLimiter(100, 60000); // 100 requests per minute
 
 /**
- * A client for the CloudUnity API
+ * A client for the CloudUnity API with enhanced security and error handling
  */
 export class ApiClient {
   private apiKey: string | null = null;
-  public baseUrl: string; // Changed from private to public
+  public baseUrl: string;
 
   constructor(baseUrl: string = 'https://api.cloudunity.com') {
     this.baseUrl = baseUrl;
@@ -35,7 +38,7 @@ export class ApiClient {
   }
 
   /**
-   * Make an API request
+   * Make an API request with enhanced error handling and rate limiting
    */
   private async request<T>(
     method: string,
@@ -44,7 +47,22 @@ export class ApiClient {
     isFormData: boolean = false
   ): Promise<T> {
     if (!this.apiKey) {
-      throw new Error('API key not set');
+      throw errorHandler.handleError(new Error('API key not set'), {
+        operation: 'api_request',
+        path,
+        method,
+      });
+    }
+
+    // Check rate limit
+    const rateLimitResult = rateLimiter.isAllowed(this.apiKey);
+    if (!rateLimitResult.allowed) {
+      throw errorHandler.handleError(new Error('API rate limit exceeded'), {
+        operation: 'api_request',
+        path,
+        method,
+        resetTime: rateLimitResult.resetTime,
+      });
     }
 
     const headers: Record<string, string> = {
@@ -58,6 +76,8 @@ export class ApiClient {
     const options: RequestInit = {
       method,
       headers,
+      // Add timeout
+      signal: AbortSignal.timeout(30000), // 30 second timeout
     };
 
     if (data) {
@@ -68,24 +88,43 @@ export class ApiClient {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, options);
-    
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, options);
+      
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: response.statusText };
+        }
+        
+        const error = new Error(errorData.error || 'API request failed');
+        throw errorHandler.handleError(error, {
+          operation: 'api_request',
+          path,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+        });
       }
-      throw new Error(errorData.error || 'API request failed');
-    }
 
-    // For file downloads, return the response directly
-    if (response.headers.get('Content-Type')?.includes('application/octet-stream')) {
-      return response as unknown as T;
-    }
+      // For file downloads, return the response directly
+      if (response.headers.get('Content-Type')?.includes('application/octet-stream')) {
+        return response as unknown as T;
+      }
 
-    return response.json();
+      return response.json();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        throw errorHandler.handleError(new Error('Request timeout'), {
+          operation: 'api_request',
+          path,
+          method,
+        });
+      }
+      throw error;
+    }
   }
 
   // File Operations
@@ -180,18 +219,29 @@ export class ApiClient {
     });
   }
 
-  // API Key Management - These methods use direct Supabase function calls
+  // Enhanced API Key Management with proper error handling
 
   /**
    * List API keys
    */
   async listApiKeys(): Promise<ApiKey[]> {
-    const { data, error } = await supabase.functions.invoke('api-key-management', {
-      method: 'GET',
-    });
-    
-    if (error) throw new Error(error.message);
-    return data.keys || [];
+    try {
+      const { data, error } = await supabase.functions.invoke('api-key-management', {
+        method: 'GET',
+      });
+      
+      if (error) {
+        throw errorHandler.handleError(new Error(error.message), {
+          operation: 'list_api_keys',
+        });
+      }
+      
+      return data.keys || [];
+    } catch (error) {
+      throw errorHandler.handleError(error as Error, {
+        operation: 'list_api_keys',
+      });
+    }
   }
 
   /**
@@ -201,30 +251,58 @@ export class ApiClient {
     name: string,
     permissions: string[] = ['read']
   ): Promise<{ apiKey: ApiKey & { key: string } }> {
-    const { data, error } = await supabase.functions.invoke('api-key-management', {
-      method: 'POST',
-      body: {
+    try {
+      const { data, error } = await supabase.functions.invoke('api-key-management', {
+        method: 'POST',
+        body: {
+          name,
+          permissions,
+          expiresAt: null,
+        },
+      });
+      
+      if (error) {
+        throw errorHandler.handleError(new Error(error.message), {
+          operation: 'create_api_key',
+          name,
+          permissions,
+        });
+      }
+      
+      return data;
+    } catch (error) {
+      throw errorHandler.handleError(error as Error, {
+        operation: 'create_api_key',
         name,
         permissions,
-        expiresAt: null,
-      },
-    });
-    
-    if (error) throw new Error(error.message);
-    return data;
+      });
+    }
   }
 
   /**
    * Revoke an API key
    */
   async revokeApiKey(keyId: string): Promise<{ success: boolean }> {
-    const { data, error } = await supabase.functions.invoke('api-key-management', {
-      method: 'DELETE',
-      body: { id: keyId },
-    });
-    
-    if (error) throw new Error(error.message);
-    return { success: true };
+    try {
+      const { data, error } = await supabase.functions.invoke('api-key-management', {
+        method: 'DELETE',
+        body: { id: keyId },
+      });
+      
+      if (error) {
+        throw errorHandler.handleError(new Error(error.message), {
+          operation: 'revoke_api_key',
+          keyId,
+        });
+      }
+      
+      return { success: true };
+    } catch (error) {
+      throw errorHandler.handleError(error as Error, {
+        operation: 'revoke_api_key',
+        keyId,
+      });
+    }
   }
 }
 
