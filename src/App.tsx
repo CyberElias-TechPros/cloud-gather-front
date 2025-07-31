@@ -1,7 +1,6 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
-import { useMonitoring } from '@/hooks/useMonitoring';
 import ErrorPage from "./pages/ErrorPage";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -19,143 +18,163 @@ import AdminPage from "./pages/AdminPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AdminRoute from "./components/auth/AdminRoute";
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { MonitoringProvider } from '@/components/common/MonitoringProvider';
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />,
+    element: (
+      <MonitoringProvider>
+        <LandingPage />
+      </MonitoringProvider>
+    ),
     errorElement: <ErrorPage />,
   },
   {
     path: "/dashboard",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <DashboardPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <DashboardPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/login",
-    element: <LoginPage />,
+    element: (
+      <MonitoringProvider>
+        <LoginPage />
+      </MonitoringProvider>
+    ),
   },
   {
     path: "/auth",
-    element: <AuthPage />,
+    element: (
+      <MonitoringProvider>
+        <AuthPage />
+      </MonitoringProvider>
+    ),
   },
   {
     path: "/register",
-    element: <RegisterPage />,
+    element: (
+      <MonitoringProvider>
+        <RegisterPage />
+      </MonitoringProvider>
+    ),
   },
   {
     path: "/storage",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <StoragePage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <StoragePage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/files",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <FilesPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <FilesPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/settings",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <SettingsPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <SettingsPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/providers",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <ProvidersPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <ProvidersPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/api-docs",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <APIDocs />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <APIDocs />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/recents",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <RecentsPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <RecentsPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/team",
     element: (
-      <ProtectedRoute>
-        <ErrorBoundary>
-          <TeamPage />
-        </ErrorBoundary>
-      </ProtectedRoute>
+      <MonitoringProvider>
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <TeamPage />
+          </ErrorBoundary>
+        </ProtectedRoute>
+      </MonitoringProvider>
     ),
   },
   {
     path: "/admin",
     element: (
-      <AdminRoute>
-        <ErrorBoundary>
-          <AdminPage />
-        </ErrorBoundary>
-      </AdminRoute>
+      <MonitoringProvider>
+        <AdminRoute>
+          <ErrorBoundary>
+            <AdminPage />
+          </ErrorBoundary>
+        </AdminRoute>
+      </MonitoringProvider>
     ),
   },
 ]);
 
 function App() {
-  const { recordActivity } = useMonitoring();
-
-  useEffect(() => {
-    // Record app initialization
-    recordActivity('app_init', 'application');
-
-    // Global error handler for unhandled errors
-    const handleError = (event: ErrorEvent) => {
-      recordActivity('unhandled_error', 'error', event.filename, false, { message: event.message });
-    };
-
-    const handleRejection = (event: PromiseRejectionEvent) => {
-      recordActivity('unhandled_promise_rejection', 'error', undefined, false, { reason: event.reason?.toString() });
-    };
-
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleRejection);
-
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleRejection);
-    };
-  }, [recordActivity]);
-
-  return <RouterProvider router={router} />;
+  return (
+    <RouterProvider 
+      router={router} 
+      fallbackElement={
+        <MonitoringProvider>
+          <div>Loading...</div>
+        </MonitoringProvider>
+      }
+    />
+  );
 }
 
 export default App;
