@@ -78,13 +78,39 @@ const AdminPage = () => {
     try {
       await Promise.all([
         loadUserStats(),
-        // Removed loadProviderConfigs since the table doesn't exist yet
+        loadProviderConfigs()
       ]);
     } catch (error) {
       console.error('Error loading admin data:', error);
       toast.error('Failed to load admin data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadProviderConfigs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('provider_configs')
+        .select('*');
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setProviderConfigs(prev => prev.map(config => {
+          const dbConfig = data.find(d => d.provider_name === config.name);
+          return dbConfig ? {
+            ...config,
+            clientId: dbConfig.client_id,
+            clientSecret: dbConfig.client_secret,
+            isConfigured: !!(dbConfig.client_id && dbConfig.client_secret)
+          } : config;
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading provider configs:', error);
     }
   };
 
@@ -136,9 +162,23 @@ const AdminPage = () => {
       const config = providerConfigs.find(p => p.id === providerId);
       if (!config) return;
 
-      // For now, just show a message since the provider_configs table doesn't exist yet
-      toast.info(`Provider configuration for ${config.displayName} will be saved once the database is properly set up.`);
+      const { error } = await supabase
+        .from('provider_configs')
+        .upsert({
+          provider_name: config.name,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'provider_name'
+        });
+
+      if (error) throw error;
+
+      toast.success(`${config.displayName} configuration saved`);
       
+      // Reload configs to update the state
+      await loadProviderConfigs();
     } catch (error) {
       console.error('Error saving provider config:', error);
       toast.error('Failed to save provider configuration');
@@ -251,8 +291,6 @@ const AdminPage = () => {
                 <CardTitle>Storage Provider Configuration</CardTitle>
                 <CardDescription>
                   Configure OAuth client IDs and secrets for storage providers. These credentials enable users to connect their accounts.
-                  <br />
-                  <Badge variant="outline" className="mt-2">Note: Database setup is required before saving configurations</Badge>
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
