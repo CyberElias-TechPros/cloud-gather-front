@@ -6,6 +6,7 @@ interface UserProfile {
   id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  role?: string | null;
 }
 
 interface AuthContextType {
@@ -13,6 +14,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{
     error: Error | null;
     data: { user: User | null; session: Session | null };
@@ -36,6 +38,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   loading: true,
+  isAdmin: false,
   signIn: async () => ({ error: null, data: { user: null, session: null } }),
   signUp: async () => ({ error: null, data: { user: null, session: null } }),
   signOut: async () => {},
@@ -173,11 +176,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = signOut;
   const register = signUp;
 
+  // Calculate if user is admin
+  const isAdmin = profile?.role === 'admin';
+
   const value = {
     user,
     session,
     profile,
     loading,
+    isAdmin,
     signIn,
     signUp,
     signOut,
