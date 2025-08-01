@@ -1,1002 +1,594 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { toast } from 'sonner';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { 
-  User, 
-  Settings, 
-  Bell, 
-  Lock, 
-  Shield, 
-  Download, 
-  HardDrive, 
-  Upload, 
-  Trash2, 
-  LogOut, 
-  Loader2,
-  Save,
-  Camera,
-  FileWarning,
-  CloudOff,
-  Fingerprint
-} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import {
+  User,
+  Shield,
+  Bell,
+  Palette,
+  Upload,
+  Share2,
+  Key,
+  AlertTriangle,
+  Check,
+  Eye,
+  EyeOff,
+  Trash2,
+  Download,
+  Loader2
+} from 'lucide-react';
+
+interface UserSettings {
+  notifications: {
+    email: boolean;
+    desktop: boolean;
+    fileShared: boolean;
+    storageAlerts: boolean;
+  };
+  privacy: {
+    profileVisibility: 'public' | 'private';
+    allowIndexing: boolean;
+  };
+  upload: {
+    autoBackup: boolean;
+    compressImages: boolean;
+    maxFileSize: number;
+  };
+  display: {
+    theme: 'light' | 'dark' | 'system';
+    language: string;
+    dateFormat: string;
+  };
+}
 
 const SettingsPage = () => {
-  const { user, logout } = useAuth();
-  
-  // Profile state
-  const [profileForm, setProfileForm] = useState({
-    name: user?.user_metadata?.name || '',
-    email: user?.email || '',
-    bio: user?.user_metadata?.bio || '',
-    language: 'en',
-    avatar: user?.user_metadata?.avatar_url || ''
-  });
-  
-  // Security state
-  const [changePasswordForm, setChangePasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  
-  // Notification state
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    fileShares: true,
-    fileUpdates: true,
-    teamInvites: true,
-    securityAlerts: true,
-    marketingEmails: false,
-  });
-  
-  // Storage state
-  const [storageSettings, setStorageSettings] = useState({
-    defaultProvider: 'auto',
-    compressionEnabled: true,
-    autoSync: true,
-    autoBackup: false,
-  });
-  
-  // UI state
+  const { user, profile, updateProfile, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  // Handle profile form change
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setProfileForm(prev => ({ ...prev, [name]: value }));
-  };
-  
-  // Handle password form change
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setChangePasswordForm(prev => ({ ...prev, [name]: value }));
-  };
-  
-  // Handle notification toggle
-  const handleNotificationChange = (key: string, value: boolean) => {
-    setNotificationSettings(prev => ({ ...prev, [key]: value }));
-  };
-  
-  // Handle storage setting change
-  const handleStorageSettingChange = (key: string, value: any) => {
-    setStorageSettings(prev => ({ ...prev, [key]: value }));
-  };
-  
-  // Handle profile update
-  const handleUpdateProfile = async () => {
-    if (!user) return;
+  const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [settings, setSettings] = useState<UserSettings>({
+    notifications: {
+      email: true,
+      desktop: false,
+      fileShared: true,
+      storageAlerts: true,
+    },
+    privacy: {
+      profileVisibility: 'private',
+      allowIndexing: false,
+    },
+    upload: {
+      autoBackup: true,
+      compressImages: false,
+      maxFileSize: 100, // MB
+    },
+    display: {
+      theme: 'system',
+      language: 'en',
+      dateFormat: 'MM/DD/YYYY',
+    },
+  });
+
+  useEffect(() => {
+    if (authLoading) return;
     
+    if (!user) {
+      window.location.href = '/auth';
+      return;
+    }
+    
+    setDisplayName(profile?.display_name || user.email?.split('@')[0] || '');
+    loadUserSettings();
+  }, [user, profile, authLoading]);
+
+  const loadUserSettings = async () => {
     setLoading(true);
     try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // In a real app, this would update the user profile in Supabase
-      // await supabase.auth.updateUser({
-      //   data: {
-      //     name: profileForm.name,
-      //     bio: profileForm.bio,
-      //   }
-      // });
-      
-      toast.success('Profile updated successfully');
-    } catch (error: any) {
-      console.error('Error updating profile:', error);
-      toast.error(`Failed to update profile: ${error.message}`);
+      // In a real app, you'd load these from a user_settings table
+      // For now, we'll use localStorage as a fallback
+      const savedSettings = localStorage.getItem('user_settings');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
     } finally {
       setLoading(false);
     }
   };
-  
-  // Handle password change
-  const handleChangePassword = async () => {
-    if (!changePasswordForm.currentPassword) {
-      toast.error('Current password is required');
-      return;
-    }
-    
-    if (changePasswordForm.newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters long');
-      return;
-    }
-    
-    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
-      toast.error('New password and confirmation do not match');
-      return;
-    }
-    
-    setLoading(true);
+
+  const saveSettings = async (newSettings: Partial<UserSettings>) => {
+    setSaving(true);
     try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const updatedSettings = { ...settings, ...newSettings };
+      setSettings(updatedSettings);
       
-      // In a real app, this would update the password in Supabase
-      // await supabase.auth.updateUser({
-      //   password: changePasswordForm.newPassword
-      // });
+      // In a real app, you'd save to a user_settings table
+      localStorage.setItem('user_settings', JSON.stringify(updatedSettings));
       
-      setChangePasswordForm({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+      toast.success('Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateDisplayName = async () => {
+    if (!displayName.trim()) {
+      toast.error('Display name cannot be empty');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateProfile({ display_name: displayName.trim() });
+      toast.success('Display name updated successfully');
+    } catch (error) {
+      console.error('Error updating display name:', error);
+      toast.error('Failed to update display name');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Please fill in all password fields');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password updated successfully');
+    } catch (error: any) {
+      console.error('Error updating password:', error);
+      toast.error(error.message || 'Failed to update password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportData = async () => {
+    setSaving(true);
+    try {
+      // Get user's files
+      const { data: files, error } = await supabase
+        .from('files')
+        .select('*');
+
+      if (error) throw error;
+
+      const exportData = {
+        profile: {
+          email: user?.email,
+          displayName: profile?.display_name,
+          createdAt: user?.created_at,
+        },
+        files: files || [],
+        settings,
+        exportedAt: new Date().toISOString(),
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json'
       });
       
-      toast.success('Password changed successfully');
-    } catch (error: any) {
-      console.error('Error changing password:', error);
-      toast.error(`Failed to change password: ${error.message}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cloudedifix-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Data exported successfully');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast.error('Failed to export data');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
-  
-  // Handle account deletion
-  const handleDeleteAccount = async () => {
-    setLoading(true);
-    try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // In a real app, this would delete the account in Supabase
-      // await supabase.auth.api.deleteUser(user.id);
-      
-      toast.success('Account deleted successfully');
-      await logout();
-      window.location.href = '/';
-    } catch (error: any) {
-      console.error('Error deleting account:', error);
-      toast.error(`Failed to delete account: ${error.message}`);
-    } finally {
-      setLoading(false);
-      setShowDeleteConfirm(false);
-    }
-  };
-  
-  // Handle two factor auth toggle
-  const handleToggleTwoFactor = async () => {
-    setLoading(true);
-    try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      setTwoFactorEnabled(!twoFactorEnabled);
-      
-      if (!twoFactorEnabled) {
-        toast.success('Two-factor authentication enabled');
-      } else {
-        toast.success('Two-factor authentication disabled');
-      }
-    } catch (error: any) {
-      console.error('Error toggling 2FA:', error);
-      toast.error(`Failed to toggle 2FA: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Handle notification settings update
-  const handleUpdateNotifications = async () => {
-    setLoading(true);
-    try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      toast.success('Notification preferences updated');
-    } catch (error: any) {
-      console.error('Error updating notification settings:', error);
-      toast.error(`Failed to update notification settings: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Handle storage settings update
-  const handleUpdateStorageSettings = async () => {
-    setLoading(true);
-    try {
-      // Simulated API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      toast.success('Storage settings updated');
-    } catch (error: any) {
-      console.error('Error updating storage settings:', error);
-      toast.error(`Failed to update storage settings: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Handle file upload for avatar
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+
+  const deleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action cannot be undone.'
+    );
     
-    // In a real app, this would upload the file to storage and update the user profile
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setProfileForm(prev => ({
-        ...prev,
-        avatar: event.target?.result as string
-      }));
-      
-      toast.success('Avatar updated');
-    };
-    reader.readAsDataURL(file);
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      // In a real app, this would trigger a secure account deletion process
+      toast.error('Account deletion is not implemented in this demo');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Failed to delete account');
+    } finally {
+      setSaving(false);
+    }
   };
-  
-  // If not logged in
-  if (!user) {
+
+  if (authLoading || loading) {
     return (
       <AppLayout title="Settings">
-        <Card className="p-6">
-          <CardContent className="flex flex-col items-center justify-center space-y-4 pt-6">
-            <h2 className="text-xl font-semibold">Authentication Required</h2>
-            <p className="text-center text-muted-foreground">
-              You need to be logged in to access account settings.
-            </p>
-            <Button className="mt-4" onClick={() => window.location.href = '/login'}>
-              Log In
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex justify-center items-center h-[50vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+          <span>Loading settings...</span>
+        </div>
       </AppLayout>
     );
   }
-  
+
   return (
     <AppLayout title="Settings">
-      <Tabs defaultValue="profile" className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Account Settings</h1>
-          <TabsList>
-            <TabsTrigger value="profile">
-              <User className="h-4 w-4 mr-2" />
-              Profile
-            </TabsTrigger>
-            <TabsTrigger value="security">
-              <Lock className="h-4 w-4 mr-2" />
-              Security
-            </TabsTrigger>
-            <TabsTrigger value="notifications">
-              <Bell className="h-4 w-4 mr-2" />
-              Notifications
-            </TabsTrigger>
-            <TabsTrigger value="storage">
-              <HardDrive className="h-4 w-4 mr-2" />
-              Storage
-            </TabsTrigger>
-            <TabsTrigger value="advanced">
-              <Settings className="h-4 w-4 mr-2" />
-              Advanced
-            </TabsTrigger>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Tabs defaultValue="profile" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="preferences">Preferences</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
-        </div>
-        
-        <TabsContent value="profile" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>
-                Manage your personal information and how it appears on your profile
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex flex-col items-center space-y-2">
-                  <Avatar className="w-32 h-32">
-                    <AvatarImage src={profileForm.avatar} />
-                    <AvatarFallback>
-                      {profileForm.name?.charAt(0) || user.email?.charAt(0) || 'U'}
+
+          {/* Profile Settings */}
+          <TabsContent value="profile" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Profile Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center gap-6">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={profile?.avatar_url || undefined} />
+                    <AvatarFallback className="text-lg">
+                      {displayName.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-center">
-                    <Label htmlFor="avatar-upload" className="cursor-pointer">
-                      <div className="flex items-center text-primary hover:underline">
-                        <Camera className="h-4 w-4 mr-1" />
-                        <span>Change Photo</span>
-                      </div>
-                    </Label>
-                    <Input 
-                      id="avatar-upload" 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleAvatarUpload}
-                    />
+                  <div className="space-y-2">
+                    <Button variant="outline" size="sm">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Photo
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      JPG, GIF or PNG. Max size of 2MB.
+                    </p>
                   </div>
                 </div>
-                
-                <div className="space-y-4 flex-1">
+
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Display Name</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      placeholder="Your Name"
-                      value={profileForm.name}
-                      onChange={handleProfileChange}
-                    />
+                    <Label htmlFor="displayName">Display Name</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="displayName"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        placeholder="Enter your display name"
+                      />
+                      <Button 
+                        onClick={updateDisplayName}
+                        disabled={saving}
+                        size="sm"
+                      >
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label>Email Address</Label>
                     <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={profileForm.email}
+                      value={user?.email || ''}
                       disabled
+                      className="bg-muted"
                     />
                     <p className="text-xs text-muted-foreground">
-                      To change your email address, please contact support
+                      Email cannot be changed
                     </p>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <Textarea
-                      id="bio"
-                      name="bio"
-                      placeholder="Tell us about yourself"
-                      value={profileForm.bio}
-                      onChange={handleProfileChange}
-                      rows={4}
-                    />
-                  </div>
                 </div>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
-                  <Select
-                    value={profileForm.language}
-                    onValueChange={(value) => 
-                      setProfileForm(prev => ({ ...prev, language: value }))
-                    }
-                  >
-                    <SelectTrigger id="language">
-                      <SelectValue placeholder="Select a language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="fr">Français</SelectItem>
-                      <SelectItem value="es">Español</SelectItem>
-                      <SelectItem value="de">Deutsch</SelectItem>
-                      <SelectItem value="pt">Português</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Time Zone</Label>
-                  <Select defaultValue="auto">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto-detect</SelectItem>
-                      <SelectItem value="utc">UTC</SelectItem>
-                      <SelectItem value="est">Eastern Time (US & Canada)</SelectItem>
-                      <SelectItem value="pst">Pacific Time (US & Canada)</SelectItem>
-                      <SelectItem value="gmt">GMT (London)</SelectItem>
-                      <SelectItem value="cet">Central European Time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline">Cancel</Button>
-              <Button onClick={handleUpdateProfile} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Save Changes
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="security" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>
-                Update your password to keep your account secure
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current-password">Current Password</Label>
-                <Input
-                  id="current-password"
-                  name="currentPassword"
-                  type="password"
-                  value={changePasswordForm.currentPassword}
-                  onChange={handlePasswordChange}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <Input
-                  id="new-password"
-                  name="newPassword"
-                  type="password"
-                  value={changePasswordForm.newPassword}
-                  onChange={handlePasswordChange}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <Input
-                  id="confirm-password"
-                  name="confirmPassword"
-                  type="password"
-                  value={changePasswordForm.confirmPassword}
-                  onChange={handlePasswordChange}
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleChangePassword} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
-                Change Password
-              </Button>
-            </CardFooter>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Two-Factor Authentication</CardTitle>
-              <CardDescription>
-                Add an extra layer of security to your account
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="font-medium">Two-Factor Authentication</div>
-                  <div className="text-sm text-muted-foreground">
-                    {twoFactorEnabled 
-                      ? 'Your account is protected with two-factor authentication' 
-                      : 'Require a verification code when logging in'}
-                  </div>
-                </div>
-                <Switch
-                  checked={twoFactorEnabled}
-                  onCheckedChange={handleToggleTwoFactor}
-                  disabled={loading}
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <p className="text-sm text-muted-foreground">
-                <Shield className="h-4 w-4 inline-block mr-1" />
-                Two-factor authentication adds an additional layer of security by requiring access to your phone
-              </p>
-            </CardFooter>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Sessions</CardTitle>
-              <CardDescription>
-                Manage devices where you're currently logged in
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                {/* Current session */}
-                <div className="flex items-center justify-between p-2 border rounded-lg bg-muted/50">
-                  <div>
-                    <div className="font-medium">Current Browser</div>
-                    <div className="text-sm text-muted-foreground">
-                      {navigator.userAgent.includes('Chrome') ? 'Chrome' : 
-                       navigator.userAgent.includes('Firefox') ? 'Firefox' : 
-                       navigator.userAgent.includes('Safari') ? 'Safari' : 'Unknown'} - 
-                      {` ${navigator.platform.includes('Win') ? 'Windows' : 
-                          navigator.platform.includes('Mac') ? 'macOS' : 
-                          navigator.platform.includes('Linux') ? 'Linux' : 'Unknown'}`}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Active now
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" disabled>Current</Button>
-                </div>
-                
-                {/* Other mock sessions */}
-                <div className="flex items-center justify-between p-2 border rounded-lg">
-                  <div>
-                    <div className="font-medium">Mobile App</div>
-                    <div className="text-sm text-muted-foreground">
-                      iPhone 13 - iOS 15.4
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Last active 2 hours ago
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm">Logout</Button>
-                </div>
-                
-                <div className="flex items-center justify-between p-2 border rounded-lg">
-                  <div>
-                    <div className="font-medium">Desktop App</div>
-                    <div className="text-sm text-muted-foreground">
-                      macOS - Version 2.3.1
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Last active 5 days ago
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm">Logout</Button>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button variant="outline" className="w-full">
-                Logout from all other devices
-              </Button>
-            </CardFooter>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Login History</CardTitle>
-              <CardDescription>
-                Your recent account activity
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Mock login history */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-medium">Successful login</div>
-                    <div className="text-sm text-muted-foreground">
-                      From {navigator.platform.includes('Win') ? 'Windows' : 
-                            navigator.platform.includes('Mac') ? 'macOS' : 
-                            navigator.platform.includes('Linux') ? 'Linux' : 'Unknown'} - 
-                      {` ${navigator.userAgent.includes('Chrome') ? 'Chrome' : 
-                          navigator.userAgent.includes('Firefox') ? 'Firefox' : 
-                          navigator.userAgent.includes('Safari') ? 'Safari' : 'Unknown'}`}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      IP: 192.168.1.1 • Today, 10:25 AM
-                    </div>
-                  </div>
-                  <div className="text-sm font-medium text-green-600">Current Session</div>
-                </div>
-                
-                <Separator />
-                
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-medium">Successful login</div>
-                    <div className="text-sm text-muted-foreground">
-                      From iPhone - Mobile App
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      IP: 192.168.1.1 • Yesterday, 7:12 PM
-                    </div>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-medium">Successful login</div>
-                    <div className="text-sm text-muted-foreground">
-                      From macOS - Chrome
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      IP: 192.168.1.1 • Mar 26, 2023, 8:36 AM
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button variant="outline" className="w-full">
-                View Complete Login History
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Control how and when you receive notifications
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="font-medium">Email Notifications</div>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="email-notifications">Enable email notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive notifications via email
-                      </p>
-                    </div>
-                    <Switch
-                      id="email-notifications"
-                      checked={notificationSettings.emailNotifications}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('emailNotifications', checked)
-                      }
-                    />
-                  </div>
-                </div>
-                
-                <Separator />
-                
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Security Settings */}
+          <TabsContent value="security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Security Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <div className="font-medium">Notification Categories</div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="file-shares">File Shares</Label>
-                      <p className="text-sm text-muted-foreground">
-                        When someone shares a file with you
-                      </p>
+                  <h4 className="font-medium">Change Password</h4>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="currentPassword"
+                          type={showPassword ? 'text' : 'password'}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
-                    <Switch
-                      id="file-shares"
-                      checked={notificationSettings.fileShares}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('fileShares', checked)
-                      }
-                      disabled={!notificationSettings.emailNotifications}
-                    />
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                      />
+                    </div>
                   </div>
                   
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="file-updates">File Updates</Label>
-                      <p className="text-sm text-muted-foreground">
-                        When shared files are updated
-                      </p>
-                    </div>
-                    <Switch
-                      id="file-updates"
-                      checked={notificationSettings.fileUpdates}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('fileUpdates', checked)
-                      }
-                      disabled={!notificationSettings.emailNotifications}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="team-invites">Team Invites</Label>
-                      <p className="text-sm text-muted-foreground">
-                        When you're invited to join a team
-                      </p>
-                    </div>
-                    <Switch
-                      id="team-invites"
-                      checked={notificationSettings.teamInvites}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('teamInvites', checked)
-                      }
-                      disabled={!notificationSettings.emailNotifications}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="security-alerts">Security Alerts</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Important security notifications
-                      </p>
-                    </div>
-                    <Switch
-                      id="security-alerts"
-                      checked={notificationSettings.securityAlerts}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('securityAlerts', checked)
-                      }
-                    />
-                  </div>
+                  <Button onClick={updatePassword} disabled={saving}>
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Update Password
+                  </Button>
                 </div>
-                
+
                 <Separator />
-                
-                <div className="space-y-2">
-                  <div className="font-medium">Marketing</div>
+
+                <div className="space-y-4">
+                  <h4 className="font-medium">Two-Factor Authentication</h4>
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="marketing-emails">Marketing Emails</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive updates, tips, and special offers
+                    <div>
+                      <p className="text-sm">Enhance your account security</p>
+                      <p className="text-xs text-muted-foreground">
+                        Add an extra layer of security with 2FA
+                      </p>
+                    </div>
+                    <Badge variant="secondary">Coming Soon</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Notifications Settings */}
+          <TabsContent value="notifications" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Notification Preferences
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  {[
+                    { key: 'email', label: 'Email Notifications', description: 'Receive notifications via email' },
+                    { key: 'desktop', label: 'Desktop Notifications', description: 'Show notifications in your browser' },
+                    { key: 'fileShared', label: 'File Sharing', description: 'When someone shares a file with you' },
+                    { key: 'storageAlerts', label: 'Storage Alerts', description: 'When storage is running low' },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
+                      <Switch
+                        checked={settings.notifications[item.key as keyof typeof settings.notifications]}
+                        onCheckedChange={(checked) => {
+                          const newNotifications = { ...settings.notifications, [item.key]: checked };
+                          saveSettings({ notifications: newNotifications });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Preferences Settings */}
+          <TabsContent value="preferences" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Palette className="h-5 w-5" />
+                  Display & Language
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Theme</Label>
+                    <Select
+                      value={settings.display.theme}
+                      onValueChange={(value: 'light' | 'dark' | 'system') => {
+                        saveSettings({ display: { ...settings.display, theme: value } });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="dark">Dark</SelectItem>
+                        <SelectItem value="system">System</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Language</Label>
+                    <Select
+                      value={settings.display.language}
+                      onValueChange={(value) => {
+                        saveSettings({ display: { ...settings.display, language: value } });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="es">Spanish</SelectItem>
+                        <SelectItem value="fr">French</SelectItem>
+                        <SelectItem value="de">German</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Upload Preferences
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto Backup</p>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically backup files to connected providers
                       </p>
                     </div>
                     <Switch
-                      id="marketing-emails"
-                      checked={notificationSettings.marketingEmails}
-                      onCheckedChange={(checked) => 
-                        handleNotificationChange('marketingEmails', checked)
-                      }
+                      checked={settings.upload.autoBackup}
+                      onCheckedChange={(checked) => {
+                        saveSettings({ upload: { ...settings.upload, autoBackup: checked } });
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Compress Images</p>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically compress images to save space
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.upload.compressImages}
+                      onCheckedChange={(checked) => {
+                        saveSettings({ upload: { ...settings.upload, compressImages: checked } });
+                      }}
                     />
                   </div>
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleUpdateNotifications} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
-                Save Preferences
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="storage" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Storage Preferences</CardTitle>
-              <CardDescription>
-                Manage how your files are stored across providers
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="default-provider">Default Storage Provider</Label>
-                <Select
-                  value={storageSettings.defaultProvider}
-                  onValueChange={(value) => 
-                    handleStorageSettingChange('defaultProvider', value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a default provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto (Smart Routing)</SelectItem>
-                    <SelectItem value="google-drive">Google Drive</SelectItem>
-                    <SelectItem value="dropbox">Dropbox</SelectItem>
-                    <SelectItem value="onedrive">OneDrive</SelectItem>
-                    <SelectItem value="pcloud">pCloud</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  New files will be uploaded to this provider by default
-                </p>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-4">
-                <div className="font-medium">File Storage Settings</div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="compression">Enable File Compression</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Compress files to save storage space
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Data & Privacy */}
+          <TabsContent value="data" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Data Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium mb-2">Export Your Data</h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Download a copy of all your data including files, settings, and account information.
                     </p>
+                    <Button onClick={exportData} disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                      Export Data
+                    </Button>
                   </div>
-                  <Switch
-                    id="compression"
-                    checked={storageSettings.compressionEnabled}
-                    onCheckedChange={(checked) => 
-                      handleStorageSettingChange('compressionEnabled', checked)
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="auto-sync">Auto-Sync Files</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically sync files between providers
+
+                  <div className="p-4 border border-destructive/20 rounded-lg bg-destructive/5">
+                    <h4 className="font-medium mb-2 text-destructive">Danger Zone</h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Once you delete your account, there is no going back. Please be certain.
                     </p>
+                    <Button 
+                      variant="destructive"
+                      onClick={deleteAccount}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                      Delete Account
+                    </Button>
                   </div>
-                  <Switch
-                    id="auto-sync"
-                    checked={storageSettings.autoSync}
-                    onCheckedChange={(checked) => 
-                      handleStorageSettingChange('autoSync', checked)
-                    }
-                  />
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="auto-backup">Auto-Backup Important Files</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Keep multiple copies of important files across providers
-                    </p>
-                  </div>
-                  <Switch
-                    id="auto-backup"
-                    checked={storageSettings.autoBackup}
-                    onCheckedChange={(checked) => 
-                      handleStorageSettingChange('autoBackup', checked)
-                    }
-                  />
-                </div>
-              </div>
-              
-              <Separator />
-              
-              <div>
-                <div className="font-medium mb-4">Storage Management</div>
-                <div className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start">
-                    <HardDrive className="h-4 w-4 mr-2" />
-                    Clear Temporary Files
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Export Storage Configuration
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download All Files (Archive)
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleUpdateStorageSettings} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
-                Save Storage Settings
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="advanced" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Data Backup</CardTitle>
-              <CardDescription>
-                Export your data or configure automatic backups
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Download className="h-4 w-4 mr-2" />
-                Export Account Data
-              </Button>
-              
-              <p className="text-sm text-muted-foreground">
-                Your export will contain all your files, folders, and account settings
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Management</CardTitle>
-              <CardDescription>
-                Manage or delete your account
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="font-medium">Log out everywhere</div>
-                <p className="text-sm text-muted-foreground">
-                  This will end all active sessions and require re-authentication on all devices
-                </p>
-                <Button variant="outline">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Log Out From All Devices
-                </Button>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-2">
-                <div className="font-medium text-red-500">Danger Zone</div>
-                <p className="text-sm text-muted-foreground">
-                  Once you delete your account, there is no going back. Please be certain.
-                </p>
-                <Button 
-                  variant="destructive"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Account
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-      
-      {/* Delete Account Confirmation Dialog */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete your account
-              and remove all of your data from our servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4">
-            <div className="flex items-center space-x-2 bg-orange-50 text-orange-700 p-3 rounded-md">
-              <FileWarning className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm">
-                All your files and folders will be permanently deleted
-              </p>
-            </div>
-            
-            <div className="flex items-center space-x-2 bg-yellow-50 text-yellow-700 p-3 rounded-md mt-2">
-              <CloudOff className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm">
-                Your access to all connected storage providers will be revoked
-              </p>
-            </div>
-            
-            <div className="flex items-center space-x-2 bg-red-50 text-red-700 p-3 rounded-md mt-2">
-              <Fingerprint className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm">
-                Your account and personal information will be permanently removed
-              </p>
-            </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
-              onClick={handleDeleteAccount}
-            >
-              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
-              Delete Account
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </AppLayout>
   );
 };
