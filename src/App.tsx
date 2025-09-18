@@ -19,6 +19,12 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AdminRoute from "./components/auth/AdminRoute";
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { MonitoringProvider } from '@/components/common/MonitoringProvider';
+import AboutPage from "./pages/AboutPage";
+import BlogPage from "./pages/BlogPage";
+import ContactPage from "./pages/ContactPage";
+import PricingPage from "./pages/PricingPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
 
 const router = createBrowserRouter([
   {
@@ -161,6 +167,30 @@ const router = createBrowserRouter([
         </AdminRoute>
       </MonitoringProvider>
     ),
+  },
+  {
+    path: "/about",
+    element: <AboutPage />,
+  },
+  {
+    path: "/blog",
+    element: <BlogPage />,
+  },
+  {
+    path: "/contact",
+    element: <ContactPage />,
+  },
+  {
+    path: "/pricing",
+    element: <PricingPage />,
+  },
+  {
+    path: "/privacy",
+    element: <PrivacyPage />,
+  },
+  {
+    path: "/terms",
+    element: <TermsPage />,
   },
 ]);
 
