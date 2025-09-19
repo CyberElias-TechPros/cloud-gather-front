@@ -25,6 +25,8 @@ import ContactPage from "./pages/ContactPage";
 import PricingPage from "./pages/PricingPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
+import FeaturesPage from "./pages/FeaturesPage";
+import BlogPostPage from "./pages/BlogPostPage";
 
 const router = createBrowserRouter([
   {
@@ -191,6 +193,14 @@ const router = createBrowserRouter([
   {
     path: "/terms",
     element: <TermsPage />,
+  },
+  {
+    path: "/features",
+    element: <FeaturesPage />,
+  },
+  {
+    path: "/blog/:slug",
+    element: <BlogPostPage />,
   },
 ]);
 

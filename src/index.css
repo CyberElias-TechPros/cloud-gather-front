@@ -137,3 +137,16 @@
     @apply w-10 h-10 rounded-full flex items-center justify-center;
   }
 }
+
+/* Drop zone styles */
+.drop-zone {
+  @apply border-2 border-dashed border-border rounded-lg p-6 text-center transition-colors;
+}
+
+.drop-zone-idle {
+  @apply hover:border-primary/50 hover:bg-muted/50;
+}
+
+.drop-zone-active {
+  @apply border-primary bg-primary/5;
+}
