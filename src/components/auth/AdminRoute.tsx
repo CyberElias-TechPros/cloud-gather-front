@@ -1,55 +1,33 @@
-
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import React from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { LogoMark } from "@/components/brand/Logo";
 
 interface AdminRouteProps {
   children: React.ReactNode;
   redirectTo?: string;
 }
 
-const AdminRoute: React.FC<AdminRouteProps> = ({ 
-  children, 
-  redirectTo = '/dashboard'
-}) => {
-  const { user, loading: authLoading } = useAuth();
+/**
+ * Gate for admin-only areas. Authorization is checked against the
+ * `is_admin_user()` SECURITY DEFINER RPC (via AuthContext) — never against a
+ * client-readable table, so a regular user cannot discover admin identities.
+ */
+const AdminRoute: React.FC<AdminRouteProps> = ({ children, redirectTo = "/dashboard" }) => {
+  const { user, loading, isAdmin } = useAuth();
 
-  // Check if user is admin
-  const { data: isAdmin, isLoading: adminLoading } = useQuery({
-    queryKey: ['admin-check', user?.id],
-    queryFn: async () => {
-      if (!user?.email) return false;
-      
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('id')
-        .eq('email', user.email)
-        .single();
-
-      return !error && !!data;
-    },
-    enabled: !!user?.email,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  if (authLoading || adminLoading) {
+  if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <LoadingSpinner size="lg" text="Checking permissions..." />
+      <div className="flex h-screen items-center justify-center gap-3" role="status" aria-live="polite">
+        <LogoMark className="h-10 w-10 animate-pulse" />
+        <span className="text-sm text-muted-foreground">Checking permissions…</span>
       </div>
     );
   }
 
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
 
-  if (!isAdmin) {
-    return <Navigate to={redirectTo} replace />;
-  }
+  if (!isAdmin) return <Navigate to={redirectTo} replace />;
 
   return <>{children}</>;
 };

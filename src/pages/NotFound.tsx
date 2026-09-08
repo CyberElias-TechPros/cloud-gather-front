@@ -1,37 +1,46 @@
+import React from "react";
+import { useLocation, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { CloudOff, Home, Search } from "lucide-react";
+import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { Seo } from "@/components/common/Seo";
 
-import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { CloudOff } from 'lucide-react';
-
-const NotFound = () => {
+const NotFound: React.FC = () => {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center max-w-md p-6">
-        <div className="bg-primary/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CloudOff className="h-10 w-10 text-primary" />
-        </div>
-        <h1 className="text-4xl font-bold mb-2">404</h1>
-        <h2 className="text-2xl font-semibold mb-4">Page Not Found</h2>
-        <p className="text-muted-foreground mb-6">
-          We couldn't find the page you were looking for. The path{' '}
-          <code className="bg-muted px-1 py-0.5 rounded-sm text-red-500">
-            {location.pathname}
-          </code>{' '}
-          doesn't exist or may have been moved.
-        </p>
-        <div className="flex flex-col md:flex-row gap-4 justify-center">
-          <Button asChild>
-            <Link to="/">Go to Dashboard</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/files">Browse Files</Link>
-          </Button>
+    <MarketingLayout>
+      <Seo
+        title="Page not found"
+        description="The page you are looking for does not exist or may have moved."
+        noIndex
+      />
+      <div className="flex items-center justify-center py-24">
+        <div className="mx-auto max-w-lg p-6 text-center">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+            <CloudOff className="h-10 w-10 text-primary" aria-hidden="true" />
+          </div>
+          <h1 className="mb-2 text-4xl font-bold">404</h1>
+          <h2 className="mb-4 text-xl font-semibold">Page not found</h2>
+          <p className="mb-8 text-muted-foreground">
+            We couldn&apos;t find <code className="rounded-sm bg-muted px-1.5 py-0.5 text-sm">{location.pathname}</code>.
+            It may have been moved, or the link might be out of date.
+          </p>
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
+            <Button asChild>
+              <Link to="/">
+                <Home className="mr-2 h-4 w-4" aria-hidden="true" /> Back to home
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/features">
+                <Search className="mr-2 h-4 w-4" aria-hidden="true" /> Explore features
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </MarketingLayout>
   );
 };
 

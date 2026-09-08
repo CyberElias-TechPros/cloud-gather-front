@@ -49,7 +49,7 @@ export function formatDate(date: string | null): string {
       hour: '2-digit',
       minute: '2-digit'
     }).format(dateObj);
-  } catch (error) {
+  } catch {
     return 'Invalid date';
   }
 }
@@ -61,7 +61,7 @@ export function generateShareUrl(fileId: string): string {
 export function parseJwt(token: string) {
   try {
     return JSON.parse(atob(token.split('.')[1]));
-  } catch (e) {
+  } catch {
     return null;
   }
 }

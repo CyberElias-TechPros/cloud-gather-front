@@ -1,73 +1,107 @@
-# Welcome to your Lovable project
+# CloudGather
 
-## Project info
+**One home for every cloud.** CloudGather connects the cloud storage accounts you already
+use — Google Drive, Dropbox, OneDrive, Box, S3-compatible buckets and more — and lets you
+browse, search, organize and share everything from a single dashboard. Your files stay
+with their original providers; CloudGather is a management layer, not a migration tool.
 
-**URL**: https://lovable.dev/projects/c52dac08-c5ef-462a-9f95-a38b957a83c7
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS (shadcn-style components), deployed on **Vercel**
+- **Backend:** Supabase — Postgres + Auth + Storage + Row-Level Security, plus **Deno Edge Functions**
+- **Tests:** Vitest + Testing Library (`npm test`)
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## Quick start
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/c52dac08-c5ef-462a-9f95-a38b957a83c7) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+git clone <repository-url> cloudgather && cd cloudgather
+npm install
+cp .env.example .env   # then fill in your Supabase project values
+npm run dev            # http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+Environment variables (see `.env.example`):
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Variable | Purpose |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable ("anon") key — safe for the browser |
+| `VITE_PUBLIC_SITE_URL` | Public origin, used for canonical URLs / OAuth redirects |
 
-**Use GitHub Codespaces**
+## Scripts
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Vite dev server on port 8080 |
+| `npm run build` | Production build to `dist/` |
+| `npm run preview` | Serve the production build locally |
+| `npm test` | Run unit & component tests (Vitest) |
+| `npm run typecheck` | `tsc -b` strict project check |
+| `npm run lint` | ESLint |
 
-## What technologies are used for this project?
+## Project structure
 
-This project is built with:
+```
+├── public/                 # static assets: icons, og-image, robots.txt, sitemap.xml
+├── src/
+│   ├── components/         # brand, layout, admin, files UI, shadcn-style ui/
+│   ├── contexts/           # AuthContext (Supabase session + profile + admin RPC)
+│   ├── lib/                # site config, formatting, SEO builders, provider catalog
+│   ├── pages/              # marketing pages (SEO'd) + app pages (authed)
+│   ├── services/           # data-access layer (files.ts) — all DB calls live here
+│   └── test/               # Vitest setup
+├── supabase/
+│   ├── migrations/         # SQL migrations (latest: 20260907000000_productionize.sql)
+│   └── functions/          # Deno edge functions (API, API keys, OAuth, delete-account)
+├── vercel.json             # SPA rewrites, caching, security headers
+└── docs/                   # architecture, deployment & security notes
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Feature map
 
-## How can I deploy this project?
+**Public (SEO-targeted):** landing page with FAQ structured data, features, pricing,
+developers/API docs, blog (posts authored in the admin console, stored in `blog_posts`),
+about, contact, privacy, terms. Correct canonicals, OG/Twitter metadata, `sitemap.xml`,
+`robots.txt` that excludes all authenticated areas.
 
-Simply open [Lovable](https://lovable.dev/projects/c52dac08-c5ef-462a-9f95-a38b957a83c7) and click on Share -> Publish.
+**App (authenticated):**
+- **Dashboard** — usage stats, pooled-quota bar, recent activity (audit log), connected providers
+- **Files** — folder tree, upload with real progress (drag & drop), rename, delete (recursive),
+  star, download, list/grid views, sorting, search, bulk select
+- **Recents** — most recently modified files, grouped by day
+- **Storage** — usage by provider and by file type, quota warnings
+- **Providers** — connect/disconnect storage providers, pool ordering
+- **API keys** — create (shown once, stored hashed) and revoke personal API keys
+- **Settings** — profile, password change, theme & preferences (persisted to `profiles.settings`),
+  JSON data export, full account deletion
+- **Admin console** — platform stats, user list, admin management, system settings
+  (all server-side gated by `is_admin_user()` + RLS)
 
-## Can I connect a custom domain to my Lovable project?
+## Backend
 
-Yes it is!
+The API surface lives in `supabase/functions` (Deno). Key functions:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+| Function | Purpose |
+| --- | --- |
+| `storage-api` | The public REST API (`/api/v1/...`) authenticated with `x-api-key` personal keys |
+| `api-key-management` | Create/list/revoke API keys (keys stored as SHA-256 hashes, shown once) |
+| `delete-account` | Full account + data deletion cascade (JWT-verified) |
+| `google-drive-auth` | Reference OAuth connect flow (start + callback, CSRF state) |
+| `<provider>-auth` | Per-provider OAuth scaffolds following the same pattern |
+| `list-files`, `list-provider-files` | Metadata listing for connected providers |
+| `sync-auth` | Credential-based provider connections |
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+See **`supabase/README.md`** for per-function status, required secrets, and the deployment
+prerequisites (OAuth credentials per provider are operator-supplied).
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design, data model, security model
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Vercel + Supabase setup, step by step
+- [`docs/SECURITY.md`](docs/SECURITY.md) — security audit summary and responsible-disclosure contact
+- [`supabase/README.md`](supabase/README.md) — migrations and edge-function operations
+
+## License
+
+All rights reserved. Provider names (Google Drive, Dropbox, OneDrive, Box, …) are
+trademarks of their respective owners; CloudGather is not affiliated with them.

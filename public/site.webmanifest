@@ -1,0 +1,13 @@
+{
+  "name": "CloudGather",
+  "short_name": "CloudGather",
+  "description": "One home for every cloud — unify your cloud storage accounts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafbfc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

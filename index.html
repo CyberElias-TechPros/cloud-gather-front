@@ -1,27 +1,52 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CloudUnity - Multi-Cloud Storage Aggregator</title>
-    <meta name="description" content="Combine multiple cloud storage services into a single unified virtual storage pool." />
-    <meta name="author" content="CloudUnity" />
+    <title>CloudGather — One home for every cloud</title>
+    <meta
+      name="description"
+      content="CloudGather brings your Google Drive, Dropbox, OneDrive, Box and more into one unified, searchable storage pool — so you always know where your files are."
+    />
+    <meta name="author" content="CloudGather" />
+    <meta name="theme-color" content="#4f46e5" />
 
-    <meta property="og:title" content="CloudUnity - Multi-Cloud Storage Aggregator" />
-    <meta property="og:description" content="Combine multiple cloud storage services into a single unified virtual storage pool." />
+    <!-- Static defaults for the landing page; per-route values are managed by the Seo component -->
+    <link rel="canonical" href="/" id="canonical-default" />
+
+    <meta property="og:title" content="CloudGather — One home for every cloud" />
+    <meta
+      property="og:description"
+      content="Connect Google Drive, Dropbox, OneDrive, Box and more. Browse, search, organize and share all of your files from a single dashboard."
+    />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:site_name" content="CloudGather" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@cloudunity" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
+    <meta name="twitter:site" content="@cloudgather" />
+    <meta name="twitter:image" content="/og-image.png" />
 
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Supabase API endpoint used for all data access -->
+    <link rel="preconnect" href="https://mqbtzqgvbhooyzkwfhzy.supabase.co" crossorigin />
+  </head>
   <body>
     <div id="root"></div>
-    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+    <noscript>
+      <div style="max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; text-align: center;">
+        <h1>CloudGather needs JavaScript</h1>
+        <p>
+          CloudGather is a web application that manages your cloud storage accounts,
+          which requires JavaScript to run securely in your browser. Please enable
+          JavaScript and reload this page.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

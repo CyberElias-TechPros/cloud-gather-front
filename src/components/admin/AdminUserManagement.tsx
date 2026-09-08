@@ -1,13 +1,15 @@
-
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { Search, UserPlus, UserMinus, Shield } from 'lucide-react';
+import React, { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { Search, UserPlus, UserMinus, Shield, ShieldAlert, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,242 +17,275 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { formatDate } from "@/lib/format";
+
+interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  role: string | null;
+  created_at: string;
+}
+
+interface AdminRow {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+const emailOk = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 const AdminUserManagement = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<AdminRow | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  const { data: profiles, isLoading: profilesLoading } = useQuery({
-    queryKey: ['admin-profiles', searchTerm],
+  const profilesQuery = useQuery({
+    queryKey: ["admin-profiles", searchTerm],
     queryFn: async () => {
       let query = supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
+        .from("profiles")
+        .select("id, display_name, role, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (searchTerm) {
-        query = query.ilike('display_name', `%${searchTerm}%`);
+        query = query.or(`display_name.ilike.%${searchTerm}%`);
       }
-
       const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    }
+      if (error) throw new Error(error.message);
+      return (data ?? []) as ProfileRow[];
+    },
   });
 
-  const { data: adminUsers, isLoading: adminLoading } = useQuery({
-    queryKey: ['admin-users'],
+  const adminUsersQuery = useQuery({
+    queryKey: ["admin-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    }
+      const { data, error } = await supabase.from("admin_users").select("*").order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as AdminRow[];
+    },
   });
 
   const addAdminMutation = useMutation({
     mutationFn: async (email: string) => {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .insert({ email })
-        .select();
-      
-      if (error) throw error;
-      return data;
+      const { error } = await supabase.from("admin_users").insert({ email: email.trim().toLowerCase() });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast.success('Admin user added successfully');
-      setNewAdminEmail('');
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Admin added");
+      setNewAdminEmail("");
       setIsAddingAdmin(false);
     },
-    onError: (error: any) => {
-      toast.error(`Failed to add admin: ${error.message}`);
-    }
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const removeAdminMutation = useMutation({
     mutationFn: async (email: string) => {
-      if (email === 'admin@cloudedifix.com') {
-        throw new Error('Cannot remove super admin');
-      }
-      
-      const { error } = await supabase
-        .from('admin_users')
-        .delete()
-        .eq('email', email);
-      
-      if (error) throw error;
+      const { error } = await supabase.from("admin_users").delete().eq("email", email);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast.success('Admin user removed successfully');
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Admin removed");
+      setRemoveTarget(null);
     },
-    onError: (error: any) => {
-      toast.error(`Failed to remove admin: ${error.message}`);
-    }
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const handleAddAdmin = () => {
-    if (newAdminEmail) {
-      addAdminMutation.mutate(newAdminEmail);
+    if (!emailOk(newAdminEmail.trim())) {
+      toast.error("Enter a valid email address.");
+      return;
     }
+    addAdminMutation.mutate(newAdminEmail);
   };
 
-  const isAdmin = (email: string) => {
-    return adminUsers?.some(admin => admin.email === email);
-  };
+  const profiles = profilesQuery.data ?? [];
+  const adminUsers = adminUsersQuery.data ?? [];
 
-  if (profilesLoading || adminLoading) {
+  if (profilesQuery.isLoading || adminUsersQuery.isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-4">
+        <Skeleton className="h-40 rounded-xl" />
+        <Skeleton className="h-72 rounded-xl" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
-          <p className="text-muted-foreground">
-            Manage users and admin permissions
-          </p>
+    <div className="space-y-4">
+      {(profilesQuery.isError || adminUsersQuery.isError) && (
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>Couldn&apos;t load user data</AlertTitle>
+          <AlertDescription>
+            {(profilesQuery.error as Error)?.message ?? (adminUsersQuery.error as Error)?.message} — make sure the
+            admin RLS policies from the consolidated migration are applied.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="relative sm:w-72">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="search"
+            placeholder="Search users by name…"
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Search users"
+          />
         </div>
-        
-        <Dialog open={isAddingAdmin} onOpenChange={setIsAddingAdmin}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Admin
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+        <Button onClick={() => setIsAddingAdmin(true)}>
+          <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" /> Add admin
+        </Button>
+      </div>
+
+      {/* Admins */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Admins</CardTitle>
+          <CardDescription>People with console access. The list is maintained in the admin_users table.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {adminUsers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No admins configured.</p>
+          ) : (
+            adminUsers.map((admin) => {
+              const isSelf = admin.email.toLowerCase() === user?.email?.toLowerCase();
+              return (
+                <div key={admin.id} className="flex items-center justify-between gap-3 rounded-lg border p-3.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Shield className="h-4.5 w-4.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        {admin.email}
+                        {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Admin since {formatDate(admin.created_at)}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSelf}
+                    title={isSelf ? "You can't remove your own admin access" : "Remove admin"}
+                    onClick={() => setRemoveTarget(admin)}
+                  >
+                    <UserMinus className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">Remove {admin.email}</span>
+                  </Button>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Users */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Users ({profiles.length})</CardTitle>
+          <CardDescription>Newest 200 registered users.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {profiles.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {searchTerm ? "No users match your search." : "No users registered yet."}
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Registered users</caption>
+                <thead>
+                  <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th scope="col" className="px-4 py-2.5 font-medium">Name</th>
+                    <th scope="col" className="px-4 py-2.5 font-medium">Role</th>
+                    <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((profile) => (
+                    <tr key={profile.id} className="border-b last:border-0">
+                      <td className="px-4 py-2.5 font-medium">{profile.display_name || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant={profile.role === "admin" ? "default" : "secondary"}>{profile.role ?? "user"}</Badge>
+                      </td>
+                      <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">{formatDate(profile.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add admin dialog */}
+      <Dialog open={isAddingAdmin} onOpenChange={setIsAddingAdmin}>
+        <DialogContent className="sm:max-w-sm">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddAdmin();
+            }}
+          >
             <DialogHeader>
-              <DialogTitle>Add Admin User</DialogTitle>
+              <DialogTitle>Add admin</DialogTitle>
               <DialogDescription>
-                Grant admin privileges to a user by their email address.
+                The user must already have a {`CloudGather`} account with this email address.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email" className="text-right">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newAdminEmail}
-                  onChange={(e) => setNewAdminEmail(e.target.value)}
-                  className="col-span-3"
-                  placeholder="user@example.com"
-                />
-              </div>
+            <div className="mt-4 space-y-1.5">
+              <Label htmlFor="admin-email">Email</Label>
+              <Input
+                id="admin-email"
+                type="email"
+                value={newAdminEmail}
+                onChange={(e) => setNewAdminEmail(e.target.value)}
+                placeholder="user@example.com"
+                autoFocus
+              />
             </div>
-            <DialogFooter>
-              <Button onClick={handleAddAdmin} disabled={addAdminMutation.isPending}>
-                {addAdminMutation.isPending ? 'Adding...' : 'Add Admin'}
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsAddingAdmin(false)}>Cancel</Button>
+              <Button type="submit" disabled={addAdminMutation.isPending}>
+                {addAdminMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                Add admin
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {/* Search */}
-      <div className="flex items-center space-x-2">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search users..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
-        />
-      </div>
-
-      {/* Admin Users */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin Users</CardTitle>
-          <CardDescription>
-            Users with administrative privileges
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {adminUsers?.map((admin) => (
-              <div key={admin.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="font-medium">{admin.email}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Admin since {new Date(admin.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  {admin.email === 'admin@cloudedifix.com' && (
-                    <Badge variant="secondary">Super Admin</Badge>
-                  )}
-                </div>
-                {admin.email !== 'admin@cloudedifix.com' && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => removeAdminMutation.mutate(admin.email)}
-                    disabled={removeAdminMutation.isPending}
-                  >
-                    <UserMinus className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* All Users */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Users</CardTitle>
-          <CardDescription>
-            Complete list of registered users
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {profiles?.map((profile) => (
-              <div key={profile.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-sm font-medium">
-                      {profile.display_name?.charAt(0).toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium">{profile.display_name || 'Unnamed User'}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Joined {new Date(profile.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {isAdmin(profile.display_name || '') && (
-                    <Badge variant="secondary">Admin</Badge>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Remove admin confirmation */}
+      <Dialog open={Boolean(removeTarget)} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove admin access?</DialogTitle>
+            <DialogDescription>
+              {removeTarget?.email} will immediately lose access to the admin console and admin-only data.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => removeTarget && removeAdminMutation.mutate(removeTarget.email)}
+              disabled={removeAdminMutation.isPending}
+            >
+              {removeAdminMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Remove admin
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
