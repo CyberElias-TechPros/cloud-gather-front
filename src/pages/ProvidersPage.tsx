@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Seo } from "@/components/common/Seo";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ import { cn } from "@/lib/utils";
 
 const ProvidersPage: React.FC = () => {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<StorageProvider[]>([]);
@@ -73,6 +75,16 @@ const ProvidersPage: React.FC = () => {
     if (user) void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Surface the result of an OAuth callback redirect (?connect=success|error).
+  useEffect(() => {
+    const connect = searchParams.get("connect");
+    if (!connect) return;
+    if (connect === "success") toast.success("Provider connected");
+    else toast.error("Provider connection didn't complete. Please try again.");
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const connectedByProvider = useMemo(() => {
     const map = new Map<string, StorageProvider>();
