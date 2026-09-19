@@ -1,400 +1,264 @@
-
-import React, { useState, useEffect } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { FileItem } from '@/types/file';
+import React, { useEffect, useMemo, useState } from "react";
+import { Seo } from "@/components/common/Seo";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Clock,
-  FileText,
+  Search,
+  MoreVertical,
+  Download,
+  Star,
+  Trash2,
+  File as FileIcon,
   Image,
   Video,
   Music,
   Archive,
-  Folder,
-  Search,
-  MoreVertical,
-  Download,
-  Share2,
-  Star,
-  Eye,
-  Calendar,
-  Filter,
-  Loader2
-} from 'lucide-react';
+  FileText,
+  Loader2,
+  FolderOpen,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { FileItem } from "@/types/file";
+import { listAllFiles, downloadFile, toggleStar, deleteFile, recordActivity } from "@/services/files";
+import { formatBytes, formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-interface RecentFile extends FileItem {
-  accessType: 'opened' | 'modified' | 'created' | 'shared';
-  accessTime: string;
-}
+const fileIcon = (file: FileItem): React.ComponentType<{ className?: string }> => {
+  if (file.is_folder) return FolderOpen;
+  const mime = file.mime_type ?? "";
+  if (mime.startsWith("image/")) return Image;
+  if (mime.startsWith("video/")) return Video;
+  if (mime.startsWith("audio/")) return Music;
+  if (/zip|compressed|rar|7z|tar/.test(mime)) return Archive;
+  if (mime.startsWith("text/") || /pdf|word|document|sheet|presentation/.test(mime)) return FileText;
+  return FileIcon;
+};
 
-const RecentsPage = () => {
-  const { user, loading: authLoading } = useAuth();
+/** Recents: the most recently modified files across all providers. */
+const RecentsPage: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<RecentFile[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [timeFilter, setTimeFilter] = useState<'today' | 'week' | 'month' | 'all'>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading) return;
-    
-    if (!user) {
-      window.location.href = '/auth';
-      return;
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const rows = await listAllFiles("date", "desc");
+        if (cancelled) return;
+        setFiles(rows.filter((f) => !f.is_folder));
+      } catch (err) {
+        if (!cancelled) setError((err as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const grouped = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = q ? files.filter((f) => f.filename.toLowerCase().includes(q)) : files;
+    const groups: { label: string; items: FileItem[] }[] = [
+      { label: "Today", items: [] },
+      { label: "Yesterday", items: [] },
+      { label: "This week", items: [] },
+      { label: "Earlier", items: [] },
+    ];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 86400000;
+    const startOfWeek = startOfToday - 6 * 86400000;
+
+    for (const file of filtered) {
+      const ts = new Date(file.updated_at).getTime();
+      if (ts >= startOfToday) groups[0].items.push(file);
+      else if (ts >= startOfYesterday) groups[1].items.push(file);
+      else if (ts >= startOfWeek) groups[2].items.push(file);
+      else groups[3].items.push(file);
     }
-    
-    loadRecentFiles();
-  }, [user, authLoading]);
+    return groups.filter((g) => g.items.length > 0);
+  }, [files, searchQuery]);
 
-  useEffect(() => {
-    filterFiles();
-  }, [recentFiles, searchTerm, timeFilter, typeFilter]);
-
-  const loadRecentFiles = async () => {
-    setLoading(true);
-    
+  const handleDownload = async (file: FileItem) => {
+    setDownloadingId(file.id);
     try {
-      // Get recent files based on last_accessed_at and created_at
-      const { data: files, error } = await supabase
-        .from('files')
-        .select('*')
-        .not('last_accessed_at', 'is', null)
-        .order('last_accessed_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      // Transform files to include access information
-      const recentFiles: RecentFile[] = files?.map(file => ({
-        ...file,
-        accessType: determineAccessType(file),
-        accessTime: file.last_accessed_at || file.updated_at || file.created_at,
-        // Ensure compatibility fields
-        isFolder: file.is_folder || false,
-        type: file.mime_type || 'file',
-        modified: file.updated_at,
-        provider: file.provider_id || 'local'
-      })) || [];
-
-      setRecentFiles(recentFiles);
-    } catch (error) {
-      console.error('Error loading recent files:', error);
-      toast.error('Failed to load recent files');
+      await downloadFile(file);
+      void recordActivity("file_downloaded", "file", file.id, { filename: file.filename });
+    } catch (err) {
+      toast.error((err as Error).message);
     } finally {
-      setLoading(false);
+      setDownloadingId(null);
     }
   };
 
-  const determineAccessType = (file: any): 'opened' | 'modified' | 'created' | 'shared' => {
-    const now = new Date();
-    const lastAccessed = new Date(file.last_accessed_at || file.updated_at);
-    const created = new Date(file.created_at);
-    const updated = new Date(file.updated_at);
-    
-    // If file was shared recently
-    if (file.is_shared) return 'shared';
-    
-    // If last accessed is very recent compared to creation/update
-    if (lastAccessed.getTime() > Math.max(created.getTime(), updated.getTime()) + 60000) {
-      return 'opened';
-    }
-    
-    // If updated recently
-    if (updated.getTime() > created.getTime() + 60000) {
-      return 'modified';
-    }
-    
-    return 'created';
-  };
-
-  const filterFiles = () => {
-    let filtered = [...recentFiles];
-
-    // Apply search filter
-    if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(file => 
-        file.filename.toLowerCase().includes(search)
-      );
-    }
-
-    // Apply time filter
-    const now = new Date();
-    switch (timeFilter) {
-      case 'today':
-        filtered = filtered.filter(file => {
-          const accessDate = new Date(file.accessTime);
-          return accessDate.toDateString() === now.toDateString();
-        });
-        break;
-      case 'week':
-        filtered = filtered.filter(file => {
-          const accessDate = new Date(file.accessTime);
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return accessDate >= weekAgo;
-        });
-        break;
-      case 'month':
-        filtered = filtered.filter(file => {
-          const accessDate = new Date(file.accessTime);
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          return accessDate >= monthAgo;
-        });
-        break;
-    }
-
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(file => {
-        if (typeFilter === 'folders') return file.isFolder;
-        if (typeFilter === 'images') return file.mime_type?.startsWith('image/');
-        if (typeFilter === 'documents') return file.mime_type?.includes('pdf') || file.mime_type?.includes('document');
-        if (typeFilter === 'videos') return file.mime_type?.startsWith('video/');
-        if (typeFilter === 'audio') return file.mime_type?.startsWith('audio/');
-        return true;
-      });
-    }
-
-    setFilteredFiles(filtered);
-  };
-
-  const getFileIcon = (file: RecentFile) => {
-    if (file.isFolder) return Folder;
-    
-    const mimeType = file.mime_type || '';
-    if (mimeType.startsWith('image/')) return Image;
-    if (mimeType.startsWith('video/')) return Video;
-    if (mimeType.startsWith('audio/')) return Music;
-    if (mimeType.includes('zip') || mimeType.includes('archive')) return Archive;
-    
-    return FileText;
-  };
-
-  const getAccessTypeLabel = (type: string) => {
-    switch (type) {
-      case 'opened': return 'Opened';
-      case 'modified': return 'Modified';
-      case 'created': return 'Created';
-      case 'shared': return 'Shared';
-      default: return 'Accessed';
+  const handleStar = async (file: FileItem) => {
+    setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, is_starred: !f.is_starred } : f)));
+    try {
+      await toggleStar(file);
+    } catch (err) {
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, is_starred: file.is_starred } : f)));
+      toast.error((err as Error).message);
     }
   };
 
-  const getAccessTypeColor = (type: string) => {
-    switch (type) {
-      case 'opened': return 'bg-blue-100 text-blue-800';
-      case 'modified': return 'bg-green-100 text-green-800';
-      case 'created': return 'bg-purple-100 text-purple-800';
-      case 'shared': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const handleDelete = async (file: FileItem) => {
+    try {
+      await deleteFile(file);
+      setFiles((prev) => prev.filter((f) => f.id !== file.id));
+      void recordActivity("file_deleted", "file", file.id, { filename: file.filename });
+      toast.success(`"${file.filename}" deleted`);
+    } catch (err) {
+      toast.error((err as Error).message);
     }
   };
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) !== 1 ? 's' : ''} ago`;
-    
-    return date.toLocaleDateString();
-  };
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  if (authLoading || loading) {
+  if (loading) {
     return (
-      <AppLayout title="Recent Files">
-        <div className="flex justify-center items-center h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-          <span>Loading recent files...</span>
-        </div>
-      </AppLayout>
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-44" />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-14 w-full rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-destructive/30">
+        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <p className="font-medium">Couldn&apos;t load recent files</p>
+          <p className="max-w-md text-sm text-muted-foreground">{error}</p>
+          <button className="text-sm font-medium text-primary underline-offset-2 hover:underline" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <AppLayout title="Recent Files">
-      <div className="space-y-6">
-        {/* Filters and Search */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search recent files..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
-              />
-            </div>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  {timeFilter === 'all' ? 'All time' : timeFilter.charAt(0).toUpperCase() + timeFilter.slice(1)}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setTimeFilter('today')}>Today</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter('week')}>This week</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter('month')}>This month</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter('all')}>All time</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Filter className="h-4 w-4 mr-2" />
-                  {typeFilter === 'all' ? 'All types' : typeFilter.charAt(0).toUpperCase() + typeFilter.slice(1)}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setTypeFilter('all')}>All types</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTypeFilter('folders')}>Folders</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTypeFilter('images')}>Images</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTypeFilter('documents')}>Documents</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTypeFilter('videos')}>Videos</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTypeFilter('audio')}>Audio</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          
-          <p className="text-sm text-muted-foreground">
-            {filteredFiles.length} of {recentFiles.length} files
+    <div className="space-y-5">
+      <Seo title="Recents" description="CloudGather recents" path="/recents" noIndex />
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <Clock className="h-6 w-6 text-primary" aria-hidden="true" /> Recents
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">Files you&apos;ve changed most recently.</p>
+        </div>
+        <div className="relative sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="search"
+            placeholder="Search recents…"
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search recent files"
+          />
+        </div>
+      </div>
+
+      {grouped.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed p-14 text-center">
+          <Clock className="mx-auto h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
+          <h2 className="mt-4 font-semibold">{searchQuery ? "No matches" : "No recent files yet"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {searchQuery ? "Try a different search term." : "Files you upload or modify will appear here."}
           </p>
         </div>
-
-        {/* Recent Files List */}
-        {filteredFiles.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Clock className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">
-                {searchTerm || timeFilter !== 'all' || typeFilter !== 'all' 
-                  ? 'No files match your filters' 
-                  : 'No recent files'
-                }
-              </h3>
-              <p className="text-muted-foreground text-center mb-4">
-                {searchTerm || timeFilter !== 'all' || typeFilter !== 'all'
-                  ? 'Try adjusting your search terms or filters'
-                  : 'Files you open, create, or modify will appear here'
-                }
-              </p>
-              {(searchTerm || timeFilter !== 'all' || typeFilter !== 'all') && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setSearchTerm('');
-                    setTimeFilter('all');
-                    setTypeFilter('all');
-                  }}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {filteredFiles.map((file) => {
-              const Icon = getFileIcon(file);
-              
-              return (
-                <Card key={file.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium truncate">{file.filename}</h3>
-                          <Badge 
-                            variant="secondary" 
-                            className={`text-xs ${getAccessTypeColor(file.accessType)}`}
-                          >
-                            {getAccessTypeLabel(file.accessType)}
-                          </Badge>
+      ) : (
+        grouped.map((group) => (
+          <section key={group.label} aria-label={group.label}>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h2>
+            <div className="overflow-hidden rounded-xl border bg-card">
+              <ul>
+                {group.items.map((file) => {
+                  const Icon = fileIcon(file);
+                  return (
+                    <li key={file.id} className="border-b last:border-0">
+                      <div
+                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
+                        onClick={() => void handleDownload(file)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            void handleDownload(file);
+                          }
+                        }}
+                        aria-label={`${file.filename}, ${formatBytes(file.size)}, modified ${formatRelativeTime(file.updated_at)}. Press Enter to download.`}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                          <Icon className="h-4.5 w-4.5 h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="flex items-center gap-2 truncate text-sm font-medium">
+                            {file.filename}
+                            {file.is_starred && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Starred" />}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(file.size)} · {formatRelativeTime(file.updated_at)}
+                          </p>
                         </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>{formatTimeAgo(file.accessTime)}</span>
-                          {!file.isFolder && (
-                            <span>{formatBytes(file.size)}</span>
-                          )}
-                          {file.mime_type && (
-                            <span className="capitalize">
-                              {file.mime_type.split('/')[0]}
-                            </span>
-                          )}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {downloadingId === file.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                          ) : null}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                                aria-label={`Actions for ${file.filename}`}
+                              >
+                                <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => void handleDownload(file)}>
+                                <Download className="mr-2 h-4 w-4" aria-hidden="true" /> Download
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleStar(file)}>
+                                <Star className={cn("mr-2 h-4 w-4", file.is_starred && "fill-amber-400 text-amber-400")} aria-hidden="true" />
+                                {file.is_starred ? "Remove star" : "Add star"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleDelete(file)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {file.is_starred && (
-                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                        )}
-                        
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Open
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Download className="h-4 w-4 mr-2" />
-                              Download
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Share2 className="h-4 w-4 mr-2" />
-                              Share
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Star className="h-4 w-4 mr-2" />
-                              {file.is_starred ? 'Unstar' : 'Star'}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </AppLayout>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </section>
+        ))
+      )}
+    </div>
   );
 };
 

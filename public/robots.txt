@@ -1,14 +1,17 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+# CloudGather — https://cloudgather.app
+# App areas require authentication and must not be indexed.
 
 User-agent: *
 Allow: /
+Disallow: /dashboard
+Disallow: /files
+Disallow: /storage
+Disallow: /providers
+Disallow: /recents
+Disallow: /settings
+Disallow: /api-keys
+Disallow: /admin
+Disallow: /reset-password
+Disallow: /auth
+
+Sitemap: https://cloudgather.app/sitemap.xml

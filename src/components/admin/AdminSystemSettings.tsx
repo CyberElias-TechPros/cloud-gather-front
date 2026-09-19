@@ -1,344 +1,261 @@
-
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { Save, Settings, Database, Mail, Shield } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import React, { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { toast } from "sonner";
+import { Save, Loader2, ShieldAlert, RotateCcw } from "lucide-react";
 
 interface SystemSetting {
   id: string;
   setting_key: string;
-  setting_value: any;
-  description?: string;
+  setting_value: unknown;
+  description: string | null;
 }
 
-const AdminSystemSettings = () => {
-  const [settings, setSettings] = useState<Record<string, any>>({});
-  const queryClient = useQueryClient();
+type EditableValue = boolean | number | string;
 
-  const { data: systemSettings, isLoading } = useQuery({
-    queryKey: ['system-settings'],
-    queryFn: async () => {
+/**
+ * Typed presentation hints for the settings keys the console knows about.
+ * Unknown keys still render (as generic JSON) so nothing is hidden or lost.
+ */
+const settingMeta: Record<string, { label: string; kind: "boolean" | "number" | "string" | "json" }> = {
+  app_name: { label: "Application name", kind: "string" },
+  app_description: { label: "Application description", kind: "string" },
+  app_version: { label: "Application version", kind: "string" },
+  maintenance_mode: { label: "Maintenance mode", kind: "boolean" },
+  registration_enabled: { label: "Allow new registrations", kind: "boolean" },
+  email_verification_required: { label: "Require email verification", kind: "boolean" },
+  max_file_size_mb: { label: "Max upload size (MB)", kind: "number" },
+  max_storage_per_user_gb: { label: "Max storage per user (GB)", kind: "number" },
+  api_rate_limit_per_minute: { label: "API rate limit (requests/min)", kind: "number" },
+  session_timeout_minutes: { label: "Session timeout (minutes)", kind: "number" },
+  password_min_length: { label: "Minimum password length", kind: "number" },
+  analytics_enabled: { label: "Usage analytics", kind: "boolean" },
+  error_reporting_enabled: { label: "Error reporting", kind: "boolean" },
+  audit_logging_enabled: { label: "Detailed audit logging", kind: "boolean" },
+  virus_scanning_enabled: { label: "Virus scanning for uploads", kind: "boolean" },
+  allowed_file_types: { label: "Allowed file types (JSON)", kind: "json" },
+};
+
+const AdminSystemSettings = () => {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<Record<string, EditableValue>>({});
+
+  const { data: settings, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: async (): Promise<SystemSetting[]> => {
       const { data, error } = await supabase
-        .from('system_settings')
-        .select('*');
-      
-      if (error) throw error;
-      
-      // Convert to key-value pairs
-      const settingsMap: Record<string, any> = {};
-      data.forEach((setting: SystemSetting) => {
-        settingsMap[setting.setting_key] = setting.setting_value;
-      });
-      
-      setSettings(settingsMap);
-      return data;
-    }
+        .from("system_settings")
+        .select("id, setting_key, setting_value, description")
+        .order("setting_key");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as SystemSetting[];
+    },
   });
 
-  const updateSettingMutation = useMutation({
-    mutationFn: async ({ key, value, description }: { key: string; value: any; description?: string }) => {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .upsert({
-          setting_key: key,
-          setting_value: value,
-          description: description || null,
-          updated_at: new Date().toISOString()
-        });
-      
-      if (error) throw error;
-      return data;
+  useEffect(() => {
+    if (!settings) return;
+    const next: Record<string, EditableValue> = {};
+    for (const setting of settings) {
+      const value = setting.setting_value;
+      if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+        next[setting.setting_key] = value;
+      } else {
+        next[setting.setting_key] = JSON.stringify(value);
+      }
+    }
+    setDraft(next);
+  }, [settings]);
+
+  const dirtyKeys = useMemo(() => {
+    if (!settings) return new Set<string>();
+    const initial: Record<string, EditableValue> = {};
+    for (const setting of settings) {
+      const value = setting.setting_value;
+      initial[setting.setting_key] =
+        typeof value === "boolean" || typeof value === "number" || typeof value === "string"
+          ? value
+          : JSON.stringify(value);
+    }
+    const dirty = new Set<string>();
+    for (const [key, value] of Object.entries(draft)) {
+      if (initial[key] !== value) dirty.add(key);
+    }
+    return dirty;
+  }, [settings, draft]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (changes: { key: string; value: EditableValue; description: string | null }[]) => {
+      let parsedValue: unknown;
+      for (const change of changes) {
+        const kind = settingMeta[change.key]?.kind;
+        if (kind === "number") {
+          parsedValue = Number(change.value);
+          if (Number.isNaN(parsedValue)) throw new Error(`"${change.key}" must be a number.`);
+        } else if (kind === "json") {
+          try {
+            parsedValue = JSON.parse(String(change.value));
+          } catch {
+            throw new Error(`"${change.key}" contains invalid JSON.`);
+          }
+        } else if (typeof change.value === "boolean") {
+          parsedValue = change.value;
+        } else if (kind === "string") {
+          parsedValue = String(change.value);
+        } else {
+          // Unknown key: try JSON, fall back to string.
+          try {
+            parsedValue = JSON.parse(String(change.value));
+          } catch {
+            parsedValue = String(change.value);
+          }
+        }
+        const { error } = await supabase
+          .from("system_settings")
+          .update({
+            setting_value: parsedValue as Database["public"]["Tables"]["system_settings"]["Update"]["setting_value"],
+            updated_at: new Date().toISOString(),
+          })
+          .eq("setting_key", change.key);
+        if (error) throw new Error(`${change.key}: ${error.message}`);
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['system-settings'] });
-      toast.success('Settings updated successfully');
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+      toast.success("Settings saved");
     },
-    onError: (error: any) => {
-      toast.error(`Failed to update settings: ${error.message}`);
-    }
+    onError: (err: Error) => toast.error(err.message),
   });
 
-  const handleSettingChange = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleSaveSettings = () => {
-    Object.entries(settings).forEach(([key, value]) => {
-      updateSettingMutation.mutate({ key, value });
-    });
+  const handleSave = () => {
+    if (!settings) return;
+    const changes = settings
+      .filter((s) => dirtyKeys.has(s.setting_key))
+      .map((s) => ({ key: s.setting_key, value: draft[s.setting_key], description: s.description }));
+    if (changes.length === 0) return;
+    saveMutation.mutate(changes);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-4">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-32 rounded-xl" />
+        ))}
       </div>
     );
   }
 
-  return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">System Settings</h2>
-          <p className="text-muted-foreground">
-            Configure global system settings and preferences
-          </p>
-        </div>
-        
-        <Button onClick={handleSaveSettings} disabled={updateSettingMutation.isPending}>
-          <Save className="h-4 w-4 mr-2" />
-          {updateSettingMutation.isPending ? 'Saving...' : 'Save Changes'}
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+        <AlertTitle>Couldn&apos;t load system settings</AlertTitle>
+        <AlertDescription>{(error as Error)?.message}</AlertDescription>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+          Try again
         </Button>
+      </Alert>
+    );
+  }
+
+  const ordered = [...(settings ?? [])].sort((a, b) => {
+    const aKnown = a.setting_key in settingMeta ? 0 : 1;
+    const bKnown = b.setting_key in settingMeta ? 0 : 1;
+    return aKnown - bKnown || a.setting_key.localeCompare(b.setting_key);
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {dirtyKeys.size > 0 ? `${dirtyKeys.size} unsaved change${dirtyKeys.size === 1 ? "" : "s"}` : "All changes saved"}
+        </p>
+        <div className="flex gap-2">
+          {dirtyKeys.size > 0 && (
+            <Button
+              variant="ghost"
+              onClick={() => settings && setDraft(Object.fromEntries(settings.map((s) => [s.setting_key, (typeof s.setting_value === "object" && s.setting_value !== null ? JSON.stringify(s.setting_value) : s.setting_value) as EditableValue])))}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" /> Discard
+            </Button>
+          )}
+          <Button onClick={handleSave} disabled={dirtyKeys.size === 0 || saveMutation.isPending}>
+            {saveMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" aria-hidden="true" />
+            )}
+            Save changes
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="storage">Storage</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-        </TabsList>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Platform configuration</CardTitle>
+          <CardDescription>
+            Global settings stored in the system_settings table. Values apply platform-wide after save.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {ordered.map((setting) => {
+            const meta = settingMeta[setting.setting_key];
+            const label = meta?.label ?? setting.setting_key;
+            const description = setting.description ?? undefined;
+            const value = draft[setting.setting_key];
 
-        <TabsContent value="general" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Settings className="h-5 w-5 mr-2" />
-                General Settings
-              </CardTitle>
-              <CardDescription>
-                Basic system configuration options
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="site-name">Site Name</Label>
-                  <Input
-                    id="site-name"
-                    value={settings.site_name || 'Cloud Edifix'}
-                    onChange={(e) => handleSettingChange('site_name', e.target.value)}
-                    placeholder="Cloud Edifix"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="site-description">Site Description</Label>
-                  <Textarea
-                    id="site-description"
-                    value={settings.site_description || ''}
-                    onChange={(e) => handleSettingChange('site_description', e.target.value)}
-                    placeholder="Universal cloud storage management platform"
-                  />
+            return (
+              <div key={setting.id} className="flex items-center justify-between gap-6">
+                <div className="min-w-0">
+                  <Label htmlFor={`setting-${setting.setting_key}`} className="font-medium">
+                    {label}
+                  </Label>
+                  {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+                  {!meta && <p className="mt-0.5 text-xs text-amber-600">Unrecognized key — edited as JSON.</p>}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Maintenance Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable maintenance mode to disable user access
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.maintenance_mode || false}
-                    onCheckedChange={(checked) => handleSettingChange('maintenance_mode', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>User Registration</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow new users to register accounts
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.allow_registration !== false}
-                    onCheckedChange={(checked) => handleSettingChange('allow_registration', checked)}
-                  />
+                <div className="shrink-0">
+                  {meta?.kind === "boolean" || (typeof setting.setting_value === "boolean" && !meta) ? (
+                    <Switch
+                      id={`setting-${setting.setting_key}`}
+                      checked={Boolean(value)}
+                      onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, [setting.setting_key]: checked }))}
+                    />
+                  ) : meta?.kind === "json" ? (
+                    <textarea
+                      id={`setting-${setting.setting_key}`}
+                      className="min-h-[72px] w-72 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={String(value ?? "")}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, [setting.setting_key]: e.target.value }))}
+                    />
+                  ) : (
+                    <Input
+                      id={`setting-${setting.setting_key}`}
+                      type={meta?.kind === "number" ? "number" : "text"}
+                      className="w-56"
+                      value={String(value ?? "")}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          [setting.setting_key]: meta?.kind === "number" ? Number(e.target.value) : e.target.value,
+                        }))
+                      }
+                    />
+                  )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="storage" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Database className="h-5 w-5 mr-2" />
-                Storage Settings
-              </CardTitle>
-              <CardDescription>
-                Configure storage limits and policies
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="max-file-size">Maximum File Size (MB)</Label>
-                  <Input
-                    id="max-file-size"
-                    type="number"
-                    value={settings.max_file_size || 100}
-                    onChange={(e) => handleSettingChange('max_file_size', parseInt(e.target.value))}
-                    placeholder="100"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="max-storage-per-user">Maximum Storage per User (GB)</Label>
-                  <Input
-                    id="max-storage-per-user"
-                    type="number"
-                    value={settings.max_storage_per_user || 5}
-                    onChange={(e) => handleSettingChange('max_storage_per_user', parseInt(e.target.value))}
-                    placeholder="5"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Auto-delete Old Files</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically delete files not accessed for 90 days
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.auto_delete_old_files || false}
-                    onCheckedChange={(checked) => handleSettingChange('auto_delete_old_files', checked)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Shield className="h-5 w-5 mr-2" />
-                Security Settings
-              </CardTitle>
-              <CardDescription>
-                Configure security and access control settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="session-timeout">Session Timeout (minutes)</Label>
-                  <Input
-                    id="session-timeout"
-                    type="number"
-                    value={settings.session_timeout || 60}
-                    onChange={(e) => handleSettingChange('session_timeout', parseInt(e.target.value))}
-                    placeholder="60"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Require Email Verification</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Require users to verify their email before accessing the platform
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.require_email_verification !== false}
-                    onCheckedChange={(checked) => handleSettingChange('require_email_verification', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Enable Two-Factor Authentication</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow users to enable 2FA for enhanced security
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.enable_2fa || false}
-                    onCheckedChange={(checked) => handleSettingChange('enable_2fa', checked)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Mail className="h-5 w-5 mr-2" />
-                Notification Settings
-              </CardTitle>
-              <CardDescription>
-                Configure system notifications and email settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="smtp-host">SMTP Host</Label>
-                  <Input
-                    id="smtp-host"
-                    value={settings.smtp_host || ''}
-                    onChange={(e) => handleSettingChange('smtp_host', e.target.value)}
-                    placeholder="smtp.example.com"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="smtp-port">SMTP Port</Label>
-                  <Input
-                    id="smtp-port"
-                    type="number"
-                    value={settings.smtp_port || 587}
-                    onChange={(e) => handleSettingChange('smtp_port', parseInt(e.target.value))}
-                    placeholder="587"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="from-email">From Email Address</Label>
-                  <Input
-                    id="from-email"
-                    type="email"
-                    value={settings.from_email || 'noreply@cloudedifix.com'}
-                    onChange={(e) => handleSettingChange('from_email', e.target.value)}
-                    placeholder="noreply@cloudedifix.com"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Email Notifications</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Send email notifications for important events
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.email_notifications !== false}
-                    onCheckedChange={(checked) => handleSettingChange('email_notifications', checked)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 };

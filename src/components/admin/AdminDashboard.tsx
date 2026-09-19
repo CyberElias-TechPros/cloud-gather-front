@@ -1,159 +1,129 @@
+import React from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Users, FileText, HardDrive, Activity, AlertCircle, Newspaper } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDateTime } from "@/lib/format";
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, FileText, HardDrive, Activity, AlertCircle, CheckCircle } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+interface AdminStats {
+  userCount: number;
+  fileCount: number;
+  providerCount: number;
+  blogCount: number;
+  recentActivities: { id: string; action: string; resource_type: string; created_at: string }[];
+  degraded: boolean;
+}
 
 const AdminDashboard = () => {
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['admin-stats'],
-    queryFn: async () => {
-      // Get user count from auth.users (accessible to admin)
-      const { count: userCount, error: userError } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
+    queryKey: ["admin-stats"],
+    queryFn: async (): Promise<AdminStats> => {
+      const [users, files, providers, blog, activity] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("files").select("id", { count: "exact", head: true }),
+        supabase.from("storage_providers").select("id", { count: "exact", head: true }),
+        supabase.from("blog_posts").select("id", { count: "exact", head: true }),
+        supabase
+          .from("audit_logs")
+          .select("id, action, resource_type, created_at")
+          .order("created_at", { ascending: false })
+          .limit(10),
+      ]);
 
-      // Get file count
-      const { count: fileCount, error: fileError } = await supabase
-        .from('files')
-        .select('*', { count: 'exact', head: true });
-
-      // Get provider count
-      const { count: providerCount, error: providerError } = await supabase
-        .from('storage_providers')
-        .select('*', { count: 'exact', head: true });
-
-      // Get blog post count
-      const { count: blogCount, error: blogError } = await supabase
-        .from('blog_posts')
-        .select('*', { count: 'exact', head: true });
-
-      // Get recent activities
-      const { data: recentActivities, error: activityError } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (userError || fileError || providerError || blogError || activityError) {
-        console.error('Error fetching admin stats:', { userError, fileError, providerError, blogError, activityError });
-      }
+      // Under RLS a blocked count surfaces as an error — track it so the UI can
+      // be honest about degraded data instead of silently showing zeros.
+      const failed = [users.error, files.error, providers.error, blog.error].some(Boolean);
 
       return {
-        userCount: userCount || 0,
-        fileCount: fileCount || 0,
-        providerCount: providerCount || 0,
-        blogCount: blogCount || 0,
-        recentActivities: recentActivities || []
+        userCount: users.count ?? 0,
+        fileCount: files.count ?? 0,
+        providerCount: providers.count ?? 0,
+        blogCount: blog.count ?? 0,
+        recentActivities: (activity.data ?? []) as AdminStats["recentActivities"],
+        degraded: failed,
       };
-    }
+    },
+    refetchInterval: 60 * 1000,
   });
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
 
+  const cards = [
+    { title: "Total users", value: stats?.userCount ?? 0, icon: Users, note: "Registered accounts" },
+    { title: "Files catalogued", value: stats?.fileCount ?? 0, icon: FileText, note: "Across all users" },
+    { title: "Provider connections", value: stats?.providerCount ?? 0, icon: HardDrive, note: "All statuses" },
+    { title: "Blog posts", value: stats?.blogCount ?? 0, icon: Newspaper, note: "Published" },
+  ];
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Admin Dashboard</h2>
-        <p className="text-muted-foreground">
-          Overview of system statistics and recent activities
-        </p>
-      </div>
+    <div className="space-y-4">
+      {stats?.degraded && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>Some counters are unavailable</AlertTitle>
+          <AlertDescription>
+            One or more admin read policies are missing on the server, so these numbers may be incomplete. See
+            the deployment guide — the consolidated migration adds the required policies.
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.userCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Registered users
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Files</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.fileCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Files stored
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage Providers</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.providerCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Connected providers
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Blog Posts</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.blogCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Published posts
-            </p>
-          </CardContent>
-        </Card>
+        {cards.map((card) => (
+          <Card key={card.title}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+              <card.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tabular-nums">{card.value.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">{card.note}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Recent Activities */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activities</CardTitle>
-          <CardDescription>
-            Latest system activities and user actions
-          </CardDescription>
+          <CardTitle className="text-base">Recent activity</CardTitle>
+          <CardDescription>Latest recorded actions across the platform.</CardDescription>
         </CardHeader>
         <CardContent>
-          {stats?.recentActivities && stats.recentActivities.length > 0 ? (
-            <div className="space-y-4">
+          {stats?.recentActivities.length ? (
+            <ul className="space-y-3">
               {stats.recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-center space-x-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                    <Activity className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {activity.action} on {activity.resource_type}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(activity.created_at).toLocaleString()}
+                <li key={activity.id} className="flex items-center gap-3 text-sm">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <Activity className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {activity.action} <span className="text-muted-foreground">· {activity.resource_type}</span>
                     </p>
                   </div>
-                </div>
+                  <time className="shrink-0 text-xs text-muted-foreground" dateTime={activity.created_at}>
+                    {formatDateTime(activity.created_at)}
+                  </time>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
-            <div className="text-center py-8">
-              <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-              <p className="mt-2 text-sm text-muted-foreground">No recent activities</p>
-            </div>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No activity recorded yet. Actions appear here as users work with files.
+            </p>
           )}
         </CardContent>
       </Card>

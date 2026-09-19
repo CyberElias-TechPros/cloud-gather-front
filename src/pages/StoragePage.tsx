@@ -1,423 +1,306 @@
-
-import React, { useState, useEffect } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import React, { useEffect, useMemo, useState } from "react";
+import { Seo } from "@/components/common/Seo";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   HardDrive,
-  PieChart,
-  Cloud,
-  Trash2,
-  Download,
-  Upload,
-  AlertTriangle,
-  TrendingUp,
-  FileText,
   Folder,
-  Image,
+  Image as ImageIcon,
   Video,
   Music,
   Archive,
-  Loader2
-} from 'lucide-react';
+  FileText,
+  File as FileIcon,
+  AlertTriangle,
+  CloudUpload,
+  ArrowRight,
+} from "lucide-react";
+import { listAllFiles, listProviders, type StorageProvider } from "@/services/files";
+import type { FileItem } from "@/types/file";
+import { formatBytes, formatPercent } from "@/lib/format";
+import { getProviderIcon, getProviderName } from "@/lib/providers";
 
-interface StorageInfo {
-  totalFiles: number;
-  totalSize: number;
-  filesByType: Record<string, { count: number; size: number }>;
-  providerUsage: {
-    id: string;
-    name: string;
-    usedSpace: number;
-    totalSpace: number;
-    status: string;
-  }[];
-  recentUploads: {
-    id: string;
-    filename: string;
-    size: number;
-    uploadedAt: string;
-    mimeType?: string;
-  }[];
+interface TypeBucket {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  count: number;
+  size: number;
 }
 
-const StoragePage = () => {
-  const { user, loading: authLoading } = useAuth();
+const StoragePage: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [storageInfo, setStorageInfo] = useState<StorageInfo>({
-    totalFiles: 0,
-    totalSize: 0,
-    filesByType: {},
-    providerUsage: [],
-    recentUploads: []
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [providers, setProviders] = useState<StorageProvider[]>([]);
 
   useEffect(() => {
-    if (authLoading) return;
-    
-    if (!user) {
-      window.location.href = '/auth';
-      return;
-    }
-    
-    loadStorageData();
-  }, [user, authLoading]);
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [fileRows, providerRows] = await Promise.all([listAllFiles(), listProviders()]);
+        if (cancelled) return;
+        setFiles(fileRows);
+        setProviders(providerRows);
+      } catch (err) {
+        if (!cancelled) setError((err as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
-  const loadStorageData = async () => {
-    setLoading(true);
-    
-    try {
-      // Load files data
-      const { data: files, error: filesError } = await supabase
-        .from('files')
-        .select('id, filename, size, mime_type, created_at, is_folder')
-        .order('created_at', { ascending: false });
+  const connected = providers.filter((p) => p.status === "connected");
+  const cloudFiles = files.filter((f) => !f.is_folder);
+  const usedBytes = cloudFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+  const totalBytes = connected.reduce((acc, p) => acc + (p.total_space || 0), 0);
+  const providerUsed = connected.reduce((acc, p) => acc + (p.used_space || 0), 0);
+  const usagePercent = totalBytes > 0 ? Math.min(100, Math.round((usedBytes / totalBytes) * 100)) : 0;
 
-      if (filesError) throw filesError;
+  const buckets = useMemo<TypeBucket[]>(() => {
+    const defs: (Omit<TypeBucket, "count" | "size"> & { match: (f: FileItem) => boolean })[] = [
+      { key: "image", label: "Images", icon: ImageIcon, match: (f) => (f.mime_type ?? "").startsWith("image/") },
+      { key: "video", label: "Videos", icon: Video, match: (f) => (f.mime_type ?? "").startsWith("video/") },
+      { key: "audio", label: "Audio", icon: Music, match: (f) => (f.mime_type ?? "").startsWith("audio/") },
+      {
+        key: "archive",
+        label: "Archives",
+        icon: Archive,
+        match: (f) => /zip|compressed|rar|7z|tar/.test(f.mime_type ?? ""),
+      },
+      {
+        key: "document",
+        label: "Documents",
+        icon: FileText,
+        match: (f) =>
+          (f.mime_type ?? "").startsWith("text/") ||
+          /pdf|word|document|sheet|presentation|msword|excel|powerpoint/.test(f.mime_type ?? ""),
+      },
+    ];
+    const result = defs.map((def) => {
+      const matched = cloudFiles.filter(def.match);
+      return {
+        ...def,
+        count: matched.length,
+        size: matched.reduce((acc, f) => acc + (f.size || 0), 0),
+      };
+    });
+    const others = cloudFiles.filter(
+      (f) => !defs.some((def) => def.match(f))
+    );
+    result.push({
+      key: "other",
+      label: "Other",
+      icon: FileIcon,
+      match: () => false,
+      count: others.length,
+      size: others.reduce((acc, f) => acc + (f.size || 0), 0),
+    });
+    return result.filter((b) => b.count > 0);
+  }, [cloudFiles]);
 
-      // Load providers data
-      const { data: providers, error: providersError } = await supabase
-        .from('storage_providers')
-        .select('id, provider_name, used_space, total_space, status')
-        .eq('status', 'connected');
+  const totalFolders = files.filter((f) => f.is_folder).length;
 
-      if (providersError) throw providersError;
-
-      // Process files by type
-      const filesByType: Record<string, { count: number; size: number }> = {};
-      
-      files?.forEach(file => {
-        if (file.is_folder) return;
-        
-        let category = 'Other';
-        if (file.mime_type) {
-          if (file.mime_type.startsWith('image/')) category = 'Images';
-          else if (file.mime_type.startsWith('video/')) category = 'Videos';
-          else if (file.mime_type.startsWith('audio/')) category = 'Audio';
-          else if (file.mime_type.includes('pdf') || file.mime_type.includes('document')) category = 'Documents';
-          else if (file.mime_type.includes('zip') || file.mime_type.includes('archive')) category = 'Archives';
-        }
-        
-        if (!filesByType[category]) {
-          filesByType[category] = { count: 0, size: 0 };
-        }
-        
-        filesByType[category].count++;
-        filesByType[category].size += file.size || 0;
-      });
-
-      // Get recent uploads
-      const recentUploads = files?.slice(0, 10).filter(file => !file.is_folder).map(file => ({
-        id: file.id,
-        filename: file.filename,
-        size: file.size || 0,
-        uploadedAt: file.created_at,
-        mimeType: file.mime_type
-      })) || [];
-
-      // Process provider usage
-      const providerUsage = providers?.map(provider => ({
-        id: provider.id,
-        name: provider.provider_name,
-        usedSpace: provider.used_space || 0,
-        totalSpace: provider.total_space || 0,
-        status: provider.status
-      })) || [];
-
-      setStorageInfo({
-        totalFiles: files?.filter(file => !file.is_folder)?.length || 0,
-        totalSize: files?.reduce((acc, file) => acc + (file.size || 0), 0) || 0,
-        filesByType,
-        providerUsage,
-        recentUploads
-      });
-
-    } catch (error) {
-      console.error('Error loading storage data:', error);
-      toast.error('Failed to load storage data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileTypeIcon = (type: string) => {
-    switch (type) {
-      case 'Images': return Image;
-      case 'Videos': return Video;
-      case 'Audio': return Music;
-      case 'Documents': return FileText;
-      case 'Archives': return Archive;
-      case 'Folders': return Folder;
-      default: return FileText;
-    }
-  };
-
-  const totalProviderSpace = storageInfo.providerUsage.reduce((acc, provider) => acc + provider.totalSpace, 0);
-  const totalUsedSpace = storageInfo.providerUsage.reduce((acc, provider) => acc + provider.usedSpace, 0);
-  const usagePercentage = totalProviderSpace > 0 ? (totalUsedSpace / totalProviderSpace) * 100 : 0;
-
-  if (authLoading || loading) {
+  if (loading) {
     return (
-      <AppLayout title="Storage">
-        <div className="flex justify-center items-center h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-          <span>Loading storage data...</span>
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-36 rounded-xl" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-56 rounded-xl" />
         </div>
-      </AppLayout>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-destructive/30">
+        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
+          <p className="font-medium">Couldn&apos;t load storage information</p>
+          <p className="max-w-md text-sm text-muted-foreground">{error}</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>Reload</Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <AppLayout title="Storage">
-      <div className="space-y-6">
-        {/* Storage Overview */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Storage</CardTitle>
-              <HardDrive className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatBytes(totalProviderSpace)}</div>
-              <p className="text-xs text-muted-foreground">
-                Across all providers
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Used Storage</CardTitle>
-              <PieChart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatBytes(totalUsedSpace)}</div>
-              <p className="text-xs text-muted-foreground">
-                {usagePercentage.toFixed(1)}% of total space
-              </p>
-              <Progress value={usagePercentage} className="mt-2" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Files Count</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{storageInfo.totalFiles}</div>
-              <p className="text-xs text-muted-foreground">
-                Total files stored
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="providers">Providers</TabsTrigger>
-            <TabsTrigger value="cleanup">Cleanup</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* File Types Breakdown */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Storage by File Type</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {Object.keys(storageInfo.filesByType).length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No files found</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {Object.entries(storageInfo.filesByType)
-                        .sort(([,a], [,b]) => b.size - a.size)
-                        .map(([type, info]) => {
-                          const Icon = getFileTypeIcon(type);
-                          const percentage = storageInfo.totalSize > 0 ? (info.size / storageInfo.totalSize) * 100 : 0;
-                          
-                          return (
-                            <div key={type} className="flex items-center gap-3">
-                              <Icon className="h-5 w-5 text-primary" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium">{type}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {info.count} files
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Progress value={percentage} className="flex-1 h-2" />
-                                  <span className="text-xs text-muted-foreground min-w-fit">
-                                    {formatBytes(info.size)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Recent Uploads */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Uploads</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {storageInfo.recentUploads.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Upload className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No recent uploads</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {storageInfo.recentUploads.map((upload) => (
-                        <div key={upload.id} className="flex items-center gap-3">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {upload.filename}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatBytes(upload.size)} • {new Date(upload.uploadedAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="providers" className="space-y-4">
-            <div className="grid gap-4">
-              {storageInfo.providerUsage.length === 0 ? (
-                <Card>
-                  <CardContent className="p-6 flex flex-col items-center justify-center min-h-[200px]">
-                    <Cloud className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="font-medium text-lg mb-2">No providers connected</h3>
-                    <p className="text-muted-foreground mb-4 text-center">
-                      Connect cloud storage providers to see usage statistics.
-                    </p>
-                    <Button onClick={() => window.location.href = '/providers'}>
-                      Connect Provider
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                storageInfo.providerUsage.map((provider) => {
-                  const usagePercent = provider.totalSpace > 0 ? (provider.usedSpace / provider.totalSpace) * 100 : 0;
-                  
-                  return (
-                    <Card key={provider.id}>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div>
-                          <CardTitle className="text-lg capitalize">
-                            {provider.name.replace('-', ' ')}
-                          </CardTitle>
-                          <p className="text-sm text-muted-foreground">
-                            {formatBytes(provider.usedSpace)} of {formatBytes(provider.totalSpace)} used
-                          </p>
-                        </div>
-                        <Badge 
-                          variant={provider.status === 'connected' ? 'default' : 'secondary'}
-                          className={provider.status === 'connected' ? 'bg-green-100 text-green-800' : ''}
-                        >
-                          {provider.status}
-                        </Badge>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span>Usage</span>
-                            <span>{usagePercent.toFixed(1)}%</span>
-                          </div>
-                          <Progress value={usagePercent} />
-                          {usagePercent > 90 && (
-                            <div className="flex items-center gap-2 text-sm text-orange-600">
-                              <AlertTriangle className="h-4 w-4" />
-                              Storage almost full
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="cleanup" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Storage Cleanup</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Free up space by removing unnecessary files
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Button variant="outline" className="h-auto p-4">
-                    <div className="flex flex-col items-center gap-2">
-                      <Trash2 className="h-6 w-6 text-destructive" />
-                      <span className="font-medium">Empty Trash</span>
-                      <span className="text-xs text-muted-foreground">
-                        Remove deleted files permanently
-                      </span>
-                    </div>
-                  </Button>
-                  
-                  <Button variant="outline" className="h-auto p-4">
-                    <div className="flex flex-col items-center gap-2">
-                      <Download className="h-6 w-6 text-primary" />
-                      <span className="font-medium">Archive Old Files</span>
-                      <span className="text-xs text-muted-foreground">
-                        Move old files to cold storage
-                      </span>
-                    </div>
-                  </Button>
-                </div>
-                
-                <div className="border-t pt-4">
-                  <h4 className="font-medium mb-2">Storage Optimization Tips</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Consider compressing large files before uploading</li>
-                    <li>• Remove duplicate files to save space</li>
-                    <li>• Archive files you don't access frequently</li>
-                    <li>• Use lower resolution for images when possible</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+    <div className="space-y-6">
+      <Seo title="Storage" description="CloudGather storage" path="/storage" noIndex />
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Storage</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Usage across your CloudGather uploads and connected providers.
+        </p>
       </div>
-    </AppLayout>
+
+      {/* Summary */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-3xl font-bold">{formatBytes(usedBytes)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {totalBytes > 0
+                  ? `of ${formatBytes(totalBytes)} pooled quota (${formatPercent(usedBytes, totalBytes)})`
+                  : `across ${cloudFiles.length.toLocaleString()} files`}
+              </p>
+            </div>
+            <div className="flex gap-6 text-right text-sm">
+              <div>
+                <p className="font-semibold">{cloudFiles.length.toLocaleString()}</p>
+                <p className="text-muted-foreground">files</p>
+              </div>
+              <div>
+                <p className="font-semibold">{totalFolders.toLocaleString()}</p>
+                <p className="text-muted-foreground">folders</p>
+              </div>
+              <div>
+                <p className="font-semibold">{connected.length}</p>
+                <p className="text-muted-foreground">providers</p>
+              </div>
+            </div>
+          </div>
+          <div
+            className="mt-5 h-3 w-full overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={usagePercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Storage used"
+          >
+            <div
+              className={`h-full rounded-full transition-all ${usagePercent > 90 ? "bg-destructive" : "bg-gradient-to-r from-primary to-accent"}`}
+              style={{ width: `${Math.max(usagePercent, usedBytes > 0 ? 2 : 0)}%` }}
+            />
+          </div>
+          {usagePercent > 90 && (
+            <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              You&apos;re above 90% of your pooled quota — consider cleaning up or adding another provider.
+            </p>
+          )}
+          {connected.length === 0 && (
+            <div className="mt-4 flex flex-col items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-muted-foreground">
+                No providers connected yet — connect one to pool its quota and browse its files.
+              </p>
+              <Button size="sm" asChild>
+                <Link to="/providers">
+                  <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" /> Connect provider
+                </Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Per-provider */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <HardDrive className="h-4 w-4 text-primary" aria-hidden="true" /> By provider
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {connected.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Connect a provider to see its quota here.</p>
+            ) : (
+              <ul className="space-y-4">
+                {connected.map((provider) => {
+                  const Icon = getProviderIcon(provider.provider_name);
+                  const pTotal = provider.total_space ?? 0;
+                  const pUsed = provider.used_space ?? 0;
+                  const pct = pTotal > 0 ? Math.round((pUsed / pTotal) * 100) : 0;
+                  return (
+                    <li key={provider.id}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2 font-medium">
+                          <Icon className={`h-4 w-4 ${"text-muted-foreground"}`} aria-hidden="true" />
+                          {getProviderName(provider.provider_name)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {pTotal > 0 ? `${formatBytes(pUsed)} / ${formatBytes(pTotal)}` : formatBytes(pUsed)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${pct > 90 ? "bg-destructive" : "bg-primary/70"}`}
+                          style={{ width: `${Math.max(Math.min(pct, 100), 1)}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+                {providerUsed > usedBytes && (
+                  <li className="text-xs text-muted-foreground">
+                    Provider quotas include files stored outside CloudGather, so provider usage can exceed the
+                    CloudGather total.
+                  </li>
+                )}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* By type */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Folder className="h-4 w-4 text-primary" aria-hidden="true" /> By file type
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cloudFiles.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Upload files to see the breakdown here.</p>
+            ) : (
+              <ul className="space-y-3">
+                {buckets.map((bucket) => (
+                  <li key={bucket.key} className="flex items-center gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                      <bucket.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">{bucket.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {bucket.count} file{bucket.count === 1 ? "" : "s"} · {formatBytes(bucket.size)}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-accent/70"
+                          style={{ width: `${Math.max((bucket.size / Math.max(usedBytes, 1)) * 100, 1)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button variant="ghost" size="sm" className="mt-4" asChild>
+              <Link to="/files">
+                Manage files <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 };
 

@@ -1,595 +1,493 @@
-
-import React, { useState, useEffect } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
+import { useAuth, type ProfileUpdates } from "@/contexts/AuthContext";
+import { Seo } from "@/components/common/Seo";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  User,
-  Shield,
-  Bell,
-  Palette,
-  Upload,
-  Share2,
-  Key,
-  AlertTriangle,
-  Check,
-  Eye,
-  EyeOff,
-  Trash2,
-  Download,
-  Loader2
-} from 'lucide-react';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { Loader2, Monitor, Moon, Sun, Download, Trash2, ShieldCheck, Laptop } from "lucide-react";
 
-interface UserSettings {
-  notifications: {
-    email: boolean;
-    desktop: boolean;
-    fileShared: boolean;
-    storageAlerts: boolean;
-  };
-  privacy: {
-    profileVisibility: 'public' | 'private';
-    allowIndexing: boolean;
-  };
-  upload: {
-    autoBackup: boolean;
-    compressImages: boolean;
-    maxFileSize: number;
-  };
-  display: {
-    theme: 'light' | 'dark' | 'system';
-    language: string;
-    dateFormat: string;
+/** Shape of the per-user preferences document persisted in profiles.settings. */
+interface UserPreferences {
+  defaultView: "list" | "grid";
+  emailProductUpdates: boolean;
+  emailSecurityAlerts: boolean;
+}
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  defaultView: "list",
+  emailProductUpdates: false,
+  emailSecurityAlerts: true,
+};
+
+function readPreferences(raw: unknown): UserPreferences {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFERENCES };
+  const source = raw as Record<string, unknown>;
+  return {
+    defaultView: source.defaultView === "grid" ? "grid" : "list",
+    emailProductUpdates: Boolean(source.emailProductUpdates),
+    emailSecurityAlerts: source.emailSecurityAlerts !== false,
   };
 }
 
-const SettingsPage = () => {
-  const { user, profile, updateProfile, loading: authLoading } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [displayName, setDisplayName] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [settings, setSettings] = useState<UserSettings>({
-    notifications: {
-      email: true,
-      desktop: false,
-      fileShared: true,
-      storageAlerts: true,
-    },
-    privacy: {
-      profileVisibility: 'private',
-      allowIndexing: false,
-    },
-    upload: {
-      autoBackup: true,
-      compressImages: false,
-      maxFileSize: 100, // MB
-    },
-    display: {
-      theme: 'system',
-      language: 'en',
-      dateFormat: 'MM/DD/YYYY',
-    },
-  });
+const SettingsPage: React.FC = () => {
+  const { user, profile, loading: authLoading, updateProfile, updatePassword, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
+
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+
+  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
+
+  const [exportBusy, setExportBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
-    if (authLoading) return;
-    
-    if (!user) {
-      window.location.href = '/auth';
-      return;
+    if (profile) {
+      setDisplayName(profile.display_name ?? "");
+      setAvatarUrl(profile.avatar_url ?? "");
+      setPreferences(readPreferences(profile.settings));
     }
-    
-    setDisplayName(profile?.display_name || user.email?.split('@')[0] || '');
-    loadUserSettings();
-  }, [user, profile, authLoading]);
+  }, [profile]);
 
-  const loadUserSettings = async () => {
-    setLoading(true);
+  const persistProfile = async (updates: ProfileUpdates, successMessage: string) => {
+    setSavingProfile(true);
     try {
-      // In a real app, you'd load these from a user_settings table
-      // For now, we'll use localStorage as a fallback
-      const savedSettings = localStorage.getItem('user_settings');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      await updateProfile(updates);
+      toast.success(successMessage);
+    } catch (err) {
+      toast.error((err as Error).message || "Could not save your changes.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleProfileSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    void persistProfile({ display_name: displayName.trim(), avatar_url: avatarUrl.trim() || null }, "Profile updated");
+  };
+
+  const updatePreference = <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
+    const next = { ...preferences, [key]: value };
+    setPreferences(next);
+    setSavingPreferences(true);
+    updateProfile({ settings: next as unknown as Record<string, unknown> })
+      .then(() => toast.success("Preference saved"))
+      .catch((err: Error) => {
+        setPreferences(preferences);
+        toast.error(err.message || "Could not save preference.");
+      })
+      .finally(() => setSavingPreferences(false));
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (newPassword.length < 8) errors.newPassword = "At least 8 characters.";
+    if (newPassword !== confirmPassword) errors.confirmPassword = "Passwords do not match.";
+    setPasswordErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setChangingPassword(true);
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        toast.error(error.message || "Could not change your password.");
+        return;
       }
-    } catch (error) {
-      console.error('Error loading settings:', error);
+      toast.success("Password changed. Other sessions remain signed in — sign out everywhere if needed.");
+      setNewPassword("");
+      setConfirmPassword("");
     } finally {
-      setLoading(false);
+      setChangingPassword(false);
     }
   };
 
-  const saveSettings = async (newSettings: Partial<UserSettings>) => {
-    setSaving(true);
+  const handleExport = async () => {
+    setExportBusy(true);
     try {
-      const updatedSettings = { ...settings, ...newSettings };
-      setSettings(updatedSettings);
-      
-      // In a real app, you'd save to a user_settings table
-      localStorage.setItem('user_settings', JSON.stringify(updatedSettings));
-      
-      toast.success('Settings saved successfully');
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateDisplayName = async () => {
-    if (!displayName.trim()) {
-      toast.error('Display name cannot be empty');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateProfile({ display_name: displayName.trim() });
-      toast.success('Display name updated successfully');
-    } catch (error) {
-      console.error('Error updating display name:', error);
-      toast.error('Failed to update display name');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updatePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Please fill in all password fields');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters long');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (error) throw error;
-
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      toast.success('Password updated successfully');
-    } catch (error: any) {
-      console.error('Error updating password:', error);
-      toast.error(error.message || 'Failed to update password');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const exportData = async () => {
-    setSaving(true);
-    try {
-      // Get user's files
-      const { data: files, error } = await supabase
-        .from('files')
-        .select('*');
-
-      if (error) throw error;
-
-      const exportData = {
-        profile: {
-          email: user?.email,
-          displayName: profile?.display_name,
-          createdAt: user?.created_at,
-        },
-        files: files || [],
-        settings,
-        exportedAt: new Date().toISOString(),
+      const [filesResult, providersResult, sharesResult] = await Promise.all([
+        supabase.from("files").select("*").order("path"),
+        supabase.from("storage_providers").select("provider_name, provider_user_email, status, total_space, used_space, created_at"),
+        supabase.from("file_shares").select("*"),
+      ]);
+      const payload = {
+        exported_at: new Date().toISOString(),
+        account: { email: user?.email, display_name: profile?.display_name },
+        files: filesResult.data ?? [],
+        providers: providersResult.data ?? [],
+        shares: sharesResult.data ?? [],
       };
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: 'application/json'
-      });
-      
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `cloudedifix-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `cloudgather-export-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
+      a.remove();
       URL.revokeObjectURL(url);
-
-      toast.success('Data exported successfully');
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Failed to export data');
+      toast.success("Export downloaded");
+    } catch (err) {
+      toast.error((err as Error).message || "Could not build your export.");
     } finally {
-      setSaving(false);
+      setExportBusy(false);
     }
   };
 
-  const deleteAccount = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete your account? This action cannot be undone.'
-    );
-    
-    if (!confirmed) return;
-
-    setSaving(true);
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE" || deleteBusy) return;
+    setDeleteBusy(true);
     try {
-      // In a real app, this would trigger a secure account deletion process
-      toast.error('Account deletion is not implemented in this demo');
-    } catch (error) {
-      console.error('Error deleting account:', error);
-      toast.error('Failed to delete account');
+      // The edge function verifies the caller's session and performs the full
+      // cascade (files, objects, shares, keys, profile, auth user).
+      const { error } = await supabase.functions.invoke("delete-account", { method: "POST" });
+      if (error) {
+        toast.error(error.message || "Account deletion failed. Contact support so we can help.");
+        return;
+      }
+      toast.success("Your account has been deleted. Goodbye!");
+      await signOut();
+      navigate("/", { replace: true });
+    } catch (err) {
+      toast.error((err as Error).message || "Account deletion failed.");
     } finally {
-      setSaving(false);
+      setDeleteBusy(false);
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || !user) {
     return (
-      <AppLayout title="Settings">
-        <div className="flex justify-center items-center h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-          <span>Loading settings...</span>
-        </div>
-      </AppLayout>
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
     );
   }
 
+  const displayNameFallback = (profile?.display_name || user.email?.split("@")[0] || "?").slice(0, 2).toUpperCase();
+
   return (
-    <AppLayout title="Settings">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Seo title="Settings" description="CloudGather settings" path="/settings" noIndex />
+      <div>
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">Manage your account, security and preferences.</p>
+        </header>
+
+        <Tabs defaultValue="profile">
+          <TabsList>
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
 
-          {/* Profile Settings */}
-          <TabsContent value="profile" className="space-y-6">
+          {/* ── Profile ─────────────────────────────────────────────── */}
+          <TabsContent value="profile" className="mt-4 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Profile Information
-                </CardTitle>
+                <CardTitle className="text-base">Public profile</CardTitle>
+                <CardDescription>How you appear in shares and team contexts.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={profile?.avatar_url || undefined} />
-                    <AvatarFallback className="text-lg">
-                      {displayName.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-2">
-                    <Button variant="outline" size="sm">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Photo
-                    </Button>
-                    <p className="text-sm text-muted-foreground">
-                      JPG, GIF or PNG. Max size of 2MB.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="displayName">Display Name</Label>
-                    <div className="flex gap-2">
+              <CardContent>
+                <form onSubmit={handleProfileSave} className="space-y-5">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage src={avatarUrl || undefined} alt="" />
+                      <AvatarFallback className="bg-primary/15 text-lg font-semibold text-primary">
+                        {displayNameFallback}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-1.5">
+                      <Label htmlFor="avatar-url">Avatar URL (optional)</Label>
                       <Input
-                        id="displayName"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="Enter your display name"
+                        id="avatar-url"
+                        type="url"
+                        placeholder="https://…"
+                        value={avatarUrl}
+                        onChange={(e) => setAvatarUrl(e.target.value)}
                       />
-                      <Button 
-                        onClick={updateDisplayName}
-                        disabled={saving}
-                        size="sm"
-                      >
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                      </Button>
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Email Address</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="display-name">Display name</Label>
                     <Input
-                      value={user?.email || ''}
-                      disabled
-                      className="bg-muted"
+                      id="display-name"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      maxLength={80}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Email cannot be changed
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" value={user.email ?? ""} disabled aria-describedby="email-note" />
+                    <p id="email-note" className="text-xs text-muted-foreground">
+                      Your sign-in email can&apos;t be changed here yet.
                     </p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Security Settings */}
-          <TabsContent value="security" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Security Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Change Password</h4>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="currentPassword"
-                          type={showPassword ? 'text' : 'password'}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input
-                        id="newPassword"
-                        type={showPassword ? 'text' : 'password'}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <Input
-                        id="confirmPassword"
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  
-                  <Button onClick={updatePassword} disabled={saving}>
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    Update Password
+                  <Button type="submit" disabled={savingProfile}>
+                    {savingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Save changes
                   </Button>
-                </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
+          {/* ── Security ────────────────────────────────────────────── */}
+          <TabsContent value="security" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Change password</CardTitle>
+                <CardDescription>
+                  Choose a strong password you don&apos;t reuse anywhere else.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-password">New password</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      aria-invalid={Boolean(passwordErrors.newPassword)}
+                    />
+                    {passwordErrors.newPassword && (
+                      <p className="text-sm text-destructive">{passwordErrors.newPassword}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirm-password">Confirm new password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      aria-invalid={Boolean(passwordErrors.confirmPassword)}
+                    />
+                    {passwordErrors.confirmPassword && (
+                      <p className="text-sm text-destructive">{passwordErrors.confirmPassword}</p>
+                    )}
+                  </div>
+                  <Button type="submit" disabled={changingPassword}>
+                    {changingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Update password
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4 text-success" aria-hidden="true" /> Sessions
+                </CardTitle>
+                <CardDescription>
+                  Sessions are managed by your browser&apos;s authentication cookie. Changing your password keeps
+                  other sessions alive — sign out below to end this one, or use &quot;sign out everywhere&quot; from
+                  a private window for a full reset.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </TabsContent>
+
+          {/* ── Preferences ─────────────────────────────────────────── */}
+          <TabsContent value="preferences" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Appearance</CardTitle>
+                <CardDescription>Follows your system by default.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="theme-select" className="flex items-center gap-2">
+                    {theme === "dark" ? <Moon className="h-4 w-4" aria-hidden="true" /> : theme === "light" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Monitor className="h-4 w-4" aria-hidden="true" />}
+                    Theme
+                  </Label>
+                  <Select value={theme ?? "system"} onValueChange={setTheme}>
+                    <SelectTrigger id="theme-select" className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">
+                        <span className="flex items-center gap-2"><Sun className="h-3.5 w-3.5" aria-hidden="true" /> Light</span>
+                      </SelectItem>
+                      <SelectItem value="dark">
+                        <span className="flex items-center gap-2"><Moon className="h-3.5 w-3.5" aria-hidden="true" /> Dark</span>
+                      </SelectItem>
+                      <SelectItem value="system">
+                        <span className="flex items-center gap-2"><Monitor className="h-3.5 w-3.5" aria-hidden="true" /> System</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Separator />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Two-Factor Authentication</h4>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Enhance your account security</p>
-                      <p className="text-xs text-muted-foreground">
-                        Add an extra layer of security with 2FA
-                      </p>
-                    </div>
-                    <Badge variant="secondary">Coming Soon</Badge>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="default-view">Default file view</Label>
+                    <p className="text-xs text-muted-foreground">Applied when you open Files.</p>
                   </div>
+                  <Select
+                    value={preferences.defaultView}
+                    onValueChange={(value) => updatePreference("defaultView", value as "list" | "grid")}
+                  >
+                    <SelectTrigger id="default-view" className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="list"><span className="flex items-center gap-2"><Laptop className="h-3.5 w-3.5" aria-hidden="true" /> List</span></SelectItem>
+                      <SelectItem value="grid">Grid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {savingPreferences && (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Saving…
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Email notifications</CardTitle>
+                <CardDescription>We send very little email — and never sell your address.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="security-emails">Security alerts</Label>
+                    <p className="text-xs text-muted-foreground">New sign-ins and provider connections.</p>
+                  </div>
+                  <Switch
+                    id="security-emails"
+                    checked={preferences.emailSecurityAlerts}
+                    onCheckedChange={(checked) => updatePreference("emailSecurityAlerts", checked)}
+                  />
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="product-emails">Product updates</Label>
+                    <p className="text-xs text-muted-foreground">Occasional news about new features. Rarely.</p>
+                  </div>
+                  <Switch
+                    id="product-emails"
+                    checked={preferences.emailProductUpdates}
+                    onCheckedChange={(checked) => updatePreference("emailProductUpdates", checked)}
+                  />
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Notifications Settings */}
-          <TabsContent value="notifications" className="space-y-6">
+          {/* ── Data ────────────────────────────────────────────────── */}
+          <TabsContent value="data" className="mt-4 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notification Preferences
-                </CardTitle>
+                <CardTitle className="text-base">Export your data</CardTitle>
+                <CardDescription>
+                  Downloads a JSON file with your account info, file catalog, provider connections and shares.
+                  File contents stay in your connected provider accounts.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  {[
-                    { key: 'email', label: 'Email Notifications', description: 'Receive notifications via email' },
-                    { key: 'desktop', label: 'Desktop Notifications', description: 'Show notifications in your browser' },
-                    { key: 'fileShared', label: 'File Sharing', description: 'When someone shares a file with you' },
-                    { key: 'storageAlerts', label: 'Storage Alerts', description: 'When storage is running low' },
-                  ].map((item) => (
-                    <div key={item.key} className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </div>
-                      <Switch
-                        checked={settings.notifications[item.key as keyof typeof settings.notifications]}
-                        onCheckedChange={(checked) => {
-                          const newNotifications = { ...settings.notifications, [item.key]: checked };
-                          saveSettings({ notifications: newNotifications });
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Preferences Settings */}
-          <TabsContent value="preferences" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Palette className="h-5 w-5" />
-                  Display & Language
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Theme</Label>
-                    <Select
-                      value={settings.display.theme}
-                      onValueChange={(value: 'light' | 'dark' | 'system') => {
-                        saveSettings({ display: { ...settings.display, theme: value } });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                        <SelectItem value="system">System</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Language</Label>
-                    <Select
-                      value={settings.display.language}
-                      onValueChange={(value) => {
-                        saveSettings({ display: { ...settings.display, language: value } });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="en">English</SelectItem>
-                        <SelectItem value="es">Spanish</SelectItem>
-                        <SelectItem value="fr">French</SelectItem>
-                        <SelectItem value="de">German</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+              <CardContent>
+                <Button variant="outline" onClick={() => void handleExport()} disabled={exportBusy}>
+                  {exportBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="mr-2 h-4 w-4" aria-hidden="true" />}
+                  Download export
+                </Button>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-destructive/30">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Upload Preferences
-                </CardTitle>
+                <CardTitle className="text-base text-destructive">Delete account</CardTitle>
+                <CardDescription>
+                  Permanently deletes your account, uploaded files, metadata, shares and API keys, and removes
+                  stored provider tokens. <strong>This cannot be undone.</strong> Download an export first if you
+                  want a copy of your data.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Auto Backup</p>
-                      <p className="text-xs text-muted-foreground">
-                        Automatically backup files to connected providers
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.upload.autoBackup}
-                      onCheckedChange={(checked) => {
-                        saveSettings({ upload: { ...settings.upload, autoBackup: checked } });
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Compress Images</p>
-                      <p className="text-xs text-muted-foreground">
-                        Automatically compress images to save space
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.upload.compressImages}
-                      onCheckedChange={(checked) => {
-                        saveSettings({ upload: { ...settings.upload, compressImages: checked } });
-                      }}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Data & Privacy */}
-          <TabsContent value="data" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="h-5 w-5" />
-                  Data Management
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">Export Your Data</h4>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Download a copy of all your data including files, settings, and account information.
-                    </p>
-                    <Button onClick={exportData} disabled={saving}>
-                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                      Export Data
-                    </Button>
-                  </div>
-
-                  <div className="p-4 border border-destructive/20 rounded-lg bg-destructive/5">
-                    <h4 className="font-medium mb-2 text-destructive">Danger Zone</h4>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Once you delete your account, there is no going back. Please be certain.
-                    </p>
-                    <Button 
-                      variant="destructive"
-                      onClick={deleteAccount}
-                      disabled={saving}
-                    >
-                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                      Delete Account
-                    </Button>
-                  </div>
-                </div>
+              <CardContent>
+                <Button variant="destructive" onClick={() => { setDeleteOpen(true); setDeleteConfirmText(""); }}>
+                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" /> Delete my account
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+
+      {/* Delete account confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              Everything tied to your account will be permanently removed, including files you uploaded to
+              CloudGather and stored provider tokens. Type <strong>DELETE</strong> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="DELETE"
+            aria-label='Type DELETE to confirm'
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeleteAccount()}
+              disabled={deleteConfirmText !== "DELETE" || deleteBusy}
+            >
+              {deleteBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Permanently delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

@@ -65,3 +65,7 @@ verify_jwt = true
 name = "sync-auth"
 verify_jwt = true
 
+
+[[functions]]
+name = "delete-account"
+verify_jwt = true
