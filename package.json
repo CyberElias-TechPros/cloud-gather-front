@@ -11,7 +11,14 @@
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:api": "wrangler dev --config cloudflare/wrangler.toml --port 8787",
+    "api:test": "vitest run --config cloudflare/vitest.config.ts",
+    "api:typecheck": "tsc -p cloudflare/tsconfig.json --noEmit",
+    "api:smoke": "node scripts/smoke-api.mjs",
+    "db:migrate:local": "wrangler d1 migrations apply cloudgather --local --config cloudflare/wrangler.toml",
+    "db:migrate:remote": "wrangler d1 migrations apply cloudgather --remote --config cloudflare/wrangler.toml",
+    "deploy:api": "wrangler deploy --config cloudflare/wrangler.toml"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",

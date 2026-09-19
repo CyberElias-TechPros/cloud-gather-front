@@ -1,193 +1,193 @@
 /**
- * Scheduled maintenance (Cron Triggers) and retention rules.
+ * Scheduled housekeeping. Two cron triggers share this module:
  *
- * Runs are idempotent and safe to repeat — Cloudflare may invoke a cron slightly
- * early or late, and a retry must never double-delete or double-notify.
+ *   `*\/30 * * * *`  light sweep — expired sessions, tokens, rate limits and
+ *                   share links. Cheap enough to run often.
+ *   `0 3 * * *`     nightly — trash purge, token refresh for connected drives,
+ *                   storage warnings and retention trimming.
+ *
+ * Everything here is idempotent and safe to run concurrently; a distributed lock
+ * keeps the heavy pass single-flight when several isolates wake at once.
  */
 
+import { acquireLock, all, first, nowIso, run } from "./db";
+import { queueEmail, templates } from "./email";
+import { purgeExpiredTrash } from "./files";
+import { expireOldShares } from "../routes/shares";
+import { pruneRateLimits } from "./ratelimit";
 import type { Env } from "../types";
-import { cleanupRateLimits } from "./ratelimit";
-import { loadSettings } from "./settings";
-import { notify, recordAudit, sendEmail } from "./events";
-import { refreshExpiredTokens } from "../routes/providers";
-import { escapeHtml, storageWarningEmail } from "./emailTemplates";
 
-export interface MaintenanceReport {
-  cron: string;
-  ranAt: string;
-  tasks: Record<string, number | string>;
+export interface MaintenanceSummary {
+  sessions: number;
+  tokens: number;
+  rateLimits: number;
+  sharesExpired: number;
+  notifications: number;
+  auditTrimmed: number;
+  trash: number;
+  storageWarnings: number;
+  usageTrimmed: number;
+  durationMs: number;
 }
 
-export async function runScheduled(env: Env, cron: string): Promise<MaintenanceReport> {
-  const tasks: Record<string, number | string> = {};
-  const now = new Date();
-  const settings = await loadSettings(env);
+export interface MaintenanceOptions {
+  /** Heavy tasks only belong on the nightly run (or an explicit admin trigger). */
+  includeHeavy?: boolean;
+}
 
-  // Both schedules share the cheap housekeeping.
-  tasks.rateLimitsPruned = await pruneRateLimits(env);
-  tasks.sessionsExpired = await expireSessions(env);
-  tasks.tokensExpired = await expireAuthTokens(env);
-  tasks.jobReceiptsPruned = await pruneJobReceipts(env);
-  tasks.adminBootstrapped = await ensureAdminBootstrap(env);
+const AUDIT_RETENTION_DAYS = 180;
+const NOTIFICATION_RETENTION_DAYS = 90;
+const USAGE_RETENTION_DAYS = 730;
+const SESSION_GRACE_DAYS = 7;
 
-  if (cron.startsWith("15 3")) {
-    tasks.trashPurged = await purgeExpiredTrash(env, settings.trash_retention_days);
-    tasks.tokensRefreshed = await refreshExpiredTokens(env);
-    tasks.storageWarnings = await sendStorageWarnings(env, settings);
-    tasks.sharesExpired = await markExpiredShares(env);
+export async function runMaintenance(env: Env, retentionDays: number, options: MaintenanceOptions = {}): Promise<MaintenanceSummary> {
+  const started = Date.now();
+  const now = nowIso();
+  const summary: MaintenanceSummary = {
+    sessions: 0,
+    tokens: 0,
+    rateLimits: 0,
+    sharesExpired: 0,
+    notifications: 0,
+    auditTrimmed: 0,
+    trash: 0,
+    storageWarnings: 0,
+    usageTrimmed: 0,
+    durationMs: 0,
+  };
+
+  const sessions = await run(
+    env.DB,
+    `DELETE FROM sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)`,
+    now,
+    new Date(Date.now() - SESSION_GRACE_DAYS * 86_400_000).toISOString(),
+  );
+  summary.sessions = sessions.meta.changes ?? 0;
+
+  const tokens = await run(
+    env.DB,
+    `DELETE FROM tokens WHERE expires_at < ? OR (used_at IS NOT NULL AND used_at < ?)`,
+    now,
+    new Date(Date.now() - 86_400_000).toISOString(),
+  );
+  summary.tokens = tokens.meta.changes ?? 0;
+
+  summary.rateLimits = await pruneRateLimits(env);
+  summary.sharesExpired = await expireOldShares(env);
+
+  const notifications = await run(
+    env.DB,
+    `DELETE FROM notifications WHERE created_at < ? OR (read_at IS NOT NULL AND read_at < ?)`,
+    new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 86_400_000).toISOString(),
+    new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  );
+  summary.notifications = notifications.meta.changes ?? 0;
+
+  if (!options.includeHeavy) {
+    summary.durationMs = Date.now() - started;
+    return summary;
   }
 
-  console.log(JSON.stringify({ level: "info", message: "scheduled run complete", cron, tasks, at: now.toISOString() }));
-  return { cron, ranAt: now.toISOString(), tasks };
-}
-
-async function pruneRateLimits(env: Env): Promise<number> {
-  await cleanupRateLimits(env);
-  return 1;
-}
-
-async function expireSessions(env: Env): Promise<number> {
-  const result = await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?1 OR (revoked_at IS NOT NULL AND revoked_at < ?2)")
-    .bind(new Date().toISOString(), new Date(Date.now() - 7 * 86_400_000).toISOString())
-    .run();
-  return result.meta.changes ?? 0;
-}
-
-async function expireAuthTokens(env: Env): Promise<number> {
-  const result = await env.DB.prepare("DELETE FROM auth_tokens WHERE expires_at < ?1 OR used_at IS NOT NULL")
-    .bind(new Date(Date.now() - 86_400_000).toISOString())
-    .run();
-  return result.meta.changes ?? 0;
-}
-
-async function pruneJobReceipts(env: Env): Promise<number> {
-  const result = await env.DB.prepare("DELETE FROM job_receipts WHERE created_at < ?1")
-    .bind(new Date(Date.now() - 3 * 86_400_000).toISOString())
-    .run();
-  return result.meta.changes ?? 0;
-}
-
-/** The operator's ADMIN_EMAIL becomes an admin as soon as that account exists. */
-async function ensureAdminBootstrap(env: Env): Promise<number | string> {
-  if (!env.ADMIN_EMAIL) return "skipped";
-  const email = env.ADMIN_EMAIL.trim().toLowerCase();
-  const result = await env.DB.prepare("UPDATE users SET role = 'admin', updated_at = ?1 WHERE email_normalized = ?2 AND role != 'admin'")
-    .bind(new Date().toISOString(), email)
-    .run();
-  const changed = result.meta.changes ?? 0;
-  if (changed > 0) {
-    await recordAudit(env, { userId: null, actorEmail: email, action: "admin.bootstrap_promoted", details: { email } });
-  }
-  return changed;
-}
-
-/** Trash older than the retention window is removed — objects first, then rows. */
-async function purgeExpiredTrash(env: Env, retentionDays: number): Promise<number> {
-  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
-  const expired = await env.DB.prepare("SELECT id, user_id FROM files WHERE trashed_at IS NOT NULL AND trashed_at < ?1")
-    .bind(cutoff)
-    .all<{ id: string; user_id: string }>();
-
-  const roots = expired.results ?? [];
-  const targetIds = new Set<string>();
-  for (const row of roots) targetIds.add(row.id);
-
-  // Include descendants of expired folders.
-  for (const row of roots) {
-    const folder = await env.DB.prepare("SELECT id, path, is_folder FROM files WHERE id = ?1").bind(row.id).first<{ id: string; path: string; is_folder: number }>();
-    if (folder?.is_folder) {
-      const children = await env.DB.prepare("SELECT id FROM files WHERE user_id = ?1 AND path LIKE ?2")
-        .bind(row.user_id, `${folder.path.replace(/[\\%_]/g, (m) => `\\${m}`)}/%`)
-        .all<{ id: string }>();
-      for (const child of children.results ?? []) targetIds.add(child.id);
-    }
+  const locked = await acquireLock(env, "maintenance:heavy", 3600);
+  if (!locked) {
+    console.log("[maintenance] heavy pass already running elsewhere; skipping");
+    summary.durationMs = Date.now() - started;
+    return summary;
   }
 
-  const ids = [...targetIds];
-  if (ids.length === 0) return 0;
+  const trash = await purgeExpiredTrash(env, retentionDays);
+  summary.trash = trash.rows;
 
-  for (let i = 0; i < ids.length; i += 50) {
-    const batch = ids.slice(i, i + 50);
-    const placeholders = batch.map((_, index) => `?${index + 1}`).join(", ");
-    const objects = await env.DB.prepare(
-      `SELECT storage_key FROM files WHERE id IN (${placeholders}) AND storage_key IS NOT NULL`,
-    )
-      .bind(...batch)
-      .all<{ storage_key: string }>();
-    const keys = (objects.results ?? []).map((row) => row.storage_key);
-    if (keys.length > 0) await env.FILES.delete(keys);
-    await env.DB.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).bind(...batch).run();
+  const audit = await run(
+    env.DB,
+    `DELETE FROM audit_logs WHERE created_at < ?`,
+    new Date(Date.now() - AUDIT_RETENTION_DAYS * 86_400_000).toISOString(),
+  );
+  summary.auditTrimmed = audit.meta.changes ?? 0;
+
+  const usage = await run(
+    env.DB,
+    `DELETE FROM usage_daily WHERE day < ?`,
+    new Date(Date.now() - USAGE_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10),
+  );
+  summary.usageTrimmed = usage.meta.changes ?? 0;
+
+  summary.storageWarnings = await sendStorageWarnings(env);
+
+  summary.durationMs = Date.now() - started;
+  console.log(`[maintenance] ${JSON.stringify(summary)}`);
+  return summary;
+}
+
+/** Entry point for `scheduled()`: picks the right pass for the cron expression. */
+export async function runScheduled(env: Env, cron: string, retentionDays: number): Promise<MaintenanceSummary> {
+  const heavy = cron.trim().startsWith("0 3") || cron.includes("0 3 * * *");
+  return runMaintenance(env, retentionDays, { includeHeavy: heavy });
+}
+
+/**
+ * Warns accounts that are running out of room. One e-mail per user per week,
+ * tracked in KV so the nightly job stays quiet.
+ */
+export async function sendStorageWarnings(env: Env, threshold = 0.85): Promise<number> {
+  const users = await all<{ id: string; email: string; display_name: string | null; storage_quota_bytes: number; used: number }>(
+    env.DB,
+    `SELECT u.id, u.email, u.display_name, u.storage_quota_bytes,
+            COALESCE(SUM(f.size), 0) AS used
+       FROM users u
+       LEFT JOIN files f ON f.user_id = u.id AND f.trashed_at IS NULL AND f.is_folder = 0
+      WHERE u.status = 'active'
+      GROUP BY u.id
+     HAVING u.storage_quota_bytes > 0 AND used > u.storage_quota_bytes * ?`,
+    threshold,
+  );
+
+  let sent = 0;
+  for (const user of users) {
+    const key = `warn:storage:${user.id}`;
+    const already = await env.CACHE.get(key).catch(() => null);
+    if (already) continue;
+
+    const percent = Math.round((user.used / user.storage_quota_bytes) * 100);
+    const template = templates.storageWarning(
+      env.APP_NAME ?? "CloudGather",
+      env.APP_URL ?? "",
+      percent,
+      `${Math.round(user.used / 1_073_741_824)} GB`,
+      `${Math.round(user.storage_quota_bytes / 1_073_741_824)} GB`,
+    );
+    await queueEmail(env, { to: user.email, subject: template.subject, html: template.html });
+
+    await run(
+      env.DB,
+      `INSERT INTO notifications (id, user_id, type, title, body, link, created_at) VALUES (?, ?, 'storage_warning', ?, ?, '/storage', ?)`,
+      `ntf_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+      user.id,
+      `Storage is ${percent}% full`,
+      "Free up space or ask an administrator for a larger allowance.",
+      nowIso(),
+    );
+
+    await env.CACHE.put(key, "sent", { expirationTtl: 7 * 86_400 }).catch(() => undefined);
+    sent += 1;
   }
 
-  return ids.length;
+  return sent;
 }
 
-async function markExpiredShares(env: Env): Promise<number> {
-  const result = await env.DB.prepare(
-    "UPDATE shares SET revoked_at = ?1 WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at < ?1",
-  )
-    .bind(new Date().toISOString())
-    .run();
-  return result.meta.changes ?? 0;
-}
-
-/** Warn (once per week per user) when the pool is over 85% full. */
-async function sendStorageWarnings(env: Env, settings: { default_quota_gb: number; app_name: string; support_email: string }): Promise<number> {
-  const rows = await env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, COALESCE(u.storage_quota_bytes, ?1) AS quota,
-            COALESCE((SELECT SUM(f.size) FROM files f WHERE f.user_id = u.id AND f.is_folder = 0 AND f.trashed_at IS NULL AND f.storage_key IS NOT NULL), 0) AS used
-       FROM users u WHERE u.status = 'active'`,
-  )
-    .bind(settings.default_quota_gb * 1024 * 1024 * 1024)
-    .all<{ id: string; email: string; display_name: string | null; quota: number; used: number }>();
-
-  const appUrl = env.APP_URL;
-  let warned = 0;
-
-  for (const row of rows.results ?? []) {
-    if (row.quota <= 0) continue;
-    const percent = (row.used / row.quota) * 100;
-    if (percent < 85) continue;
-
-    const dedupeKey = `warn:storage:${row.id}`;
-    if (await env.CACHE.get(dedupeKey)) continue;
-    await env.CACHE.put(dedupeKey, "1", { expirationTtl: 7 * 86_400 });
-
-    await notify(env, row.id, "storage", `Storage at ${Math.round(percent)}%`, `You have used ${formatGb(row.used)} GB of ${formatGb(row.quota)} GB.`, "/storage");
-    if (settings.app_name && env.RESEND_API_KEY) {
-      const template = storageWarningEmail(
-        { appName: settings.app_name, appUrl, supportEmail: settings.support_email },
-        Math.round(percent),
-        formatGb(row.used),
-        formatGb(row.quota),
-      );
-      await sendEmail(env, row.email, template.subject, template.html, template.text);
-    }
-    warned += 1;
-  }
-  return warned;
-}
-
-function formatGb(bytes: number): string {
-  return (bytes / 1024 / 1024 / 1024).toFixed(1);
-}
-
-/** Ops helper: plain-text summary of platform state for the admin dashboard. */
+/** Small runtime snapshot used by the health endpoint and the admin console. */
 export async function platformSnapshot(env: Env) {
-  const [users, files, objects] = await Promise.all([
-    env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>(),
-    env.DB.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(size),0) AS bytes FROM files WHERE is_folder = 0").first<{ total: number; bytes: number }>(),
-    env.FILES.list({ limit: 1 }),
+  const [users, files, bytes, shares] = await Promise.all([
+    first<{ count: number }>(env.DB, `SELECT COUNT(*) AS count FROM users`),
+    first<{ count: number }>(env.DB, `SELECT COUNT(*) AS count FROM files WHERE trashed_at IS NULL`),
+    first<{ total: number | null }>(env.DB, `SELECT SUM(size) AS total FROM files WHERE trashed_at IS NULL AND is_folder = 0`),
+    first<{ count: number }>(env.DB, `SELECT COUNT(*) AS count FROM shares WHERE revoked_at IS NULL`),
   ]);
   return {
-    users: users?.total ?? 0,
-    files: files?.total ?? 0,
-    bytes: files?.bytes ?? 0,
-    storageTruncated: objects.truncated,
-    adminEmailConfigured: Boolean(env.ADMIN_EMAIL),
-    emailConfigured: Boolean(env.RESEND_API_KEY),
-    generatedAt: new Date().toISOString(),
+    users: users?.count ?? 0,
+    files: files?.count ?? 0,
+    bytes: bytes?.total ?? 0,
+    activeShares: shares?.count ?? 0,
+    environment: env.ENVIRONMENT ?? "development",
   };
 }
-
-export { escapeHtml };

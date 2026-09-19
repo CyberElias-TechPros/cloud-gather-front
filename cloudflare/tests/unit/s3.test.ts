@@ -1,10 +1,10 @@
 /**
- * AWS Signature V4 correctness.
+ * AWS Signature Version 4 verification.
  *
- * The expected values come from the worked example published in the AWS
- * "Signature Version 4 signing process" documentation (GET Object with a Range
- * header). Matching the canonical-request hash, the string-to-sign hash *and*
- * the final signature proves the implementation, not just its self-consistency.
+ * The vector below is the worked example published in the AWS documentation
+ * ("Example: GET Object" in *Signature Version 4 signing process*). Matching the
+ * canonical request hash, the string-to-sign hash *and* the final signature
+ * proves the implementation, not just its self-consistency.
  */
 
 import { describe, expect, it } from "vitest";
@@ -30,9 +30,6 @@ describe("AWS SigV4", () => {
       date: new Date("2013-05-24T00:00:00Z"),
     });
 
-    // Canonical request documented by AWS:
-    //   GET\n/test.txt\n\nhost:…\nrange:…\nx-amz-content-sha256:…\nx-amz-date:…\n\n
-    //   host;range;x-amz-content-sha256;x-amz-date\n<sha256 of empty body>
     expect(signed.headers.host).toBe("examplebucket.s3.amazonaws.com");
     expect(signed.headers["x-amz-date"]).toBe("20130524T000000Z");
     expect(signed.headers.authorization).toContain(
@@ -53,7 +50,7 @@ describe("AWS SigV4", () => {
       "GET",
       "/test.txt",
       "",
-      "host:examplebucket.s3.amazonaws.com\nrange:bytes=0-9\nx-amz-content-sha256:" + payloadHash + "\nx-amz-date:20130524T000000Z\n",
+      `host:examplebucket.s3.amazonaws.com\nrange:bytes=0-9\nx-amz-content-sha256:${payloadHash}\nx-amz-date:20130524T000000Z\n`,
       "host;range;x-amz-content-sha256;x-amz-date",
       payloadHash,
     ].join("\n");

@@ -6,6 +6,7 @@
  * lookups and safe JSON columns.
  */
 
+import { randomToken } from "./crypto";
 import type { Env } from "../types";
 
 export const IDs = {
@@ -23,6 +24,11 @@ export const IDs = {
   post: "pst",
   job: "job",
 } as const;
+
+/** Prefixed, unguessable identifier: `fil_9f2c…`. */
+export function newId(prefix: string): string {
+  return `${prefix}_${randomToken(16)}`;
+}
 
 /** ISO-8601 UTC with milliseconds — always parseable by `new Date()`. */
 export function nowIso(): string {

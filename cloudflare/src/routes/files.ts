@@ -8,6 +8,7 @@
  */
 
 import {
+  asFile,
   assertQuota,
   assertUploadAllowed,
   breadcrumb,
@@ -41,16 +42,6 @@ import type { FileRow, UserRow } from "../types";
 
 const CHECKSUM_LIMIT_BYTES = 8 * 1024 * 1024;
 
-/** Narrows an unknown FormData entry to something with file semantics. */
-export function asFile(value: unknown): File | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as { name?: unknown; size?: unknown; stream?: unknown; arrayBuffer?: unknown };
-  if (typeof candidate.name !== "string") return null;
-  if (typeof candidate.size !== "number") return null;
-  if (typeof candidate.stream !== "function" && typeof candidate.arrayBuffer !== "function") return null;
-  return value as File;
-}
-
 export function parseRange(value: string | null, size: number): { offset: number; length: number } | null {
   if (!value) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
@@ -79,6 +70,7 @@ function parseListOptions(ctx: Ctx): ListOptions {
   const folderParam = url.searchParams.get("folderId");
   return {
     folderId: folderParam === "root" || folderParam === "" ? null : folderParam ?? null,
+    explicitFolder: folderParam !== null,
     search: queryValue(url, "search"),
     kind: queryValue(url, "kind"),
     starred: queryBool(url, "starred"),
@@ -575,9 +567,9 @@ export async function bulk(ctx: Ctx): Promise<Response> {
 export async function emptyTrashRoute(ctx: Ctx): Promise<Response> {
   const user = currentUser(ctx);
   const summary = await emptyTrash(ctx.env, user);
-  await record(ctx.env, { action: "file.trash_emptied", user, ctx, details: summary });
+  await record(ctx.env, { action: "file.trash_emptied", user, ctx, details: { ...summary } });
   return json({ ok: true, removed: summary.rows, bytes: summary.bytes });
 }
 
-/** Re-exported so the developer API shares exactly one range parser. */
-export { parseRange as parseRangeMaybe };
+/** Re-exported so the developer API imports one implementation. */
+export { asFile };

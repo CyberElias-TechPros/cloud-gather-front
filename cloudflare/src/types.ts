@@ -159,6 +159,35 @@ export interface ApiKeyRow {
   created_at: string;
 }
 
+export interface NotificationRow {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface ShareRowExport {
+  id: string;
+  file_id: string;
+  owner_id: string;
+  token: string;
+  recipient_email: string | null;
+  recipient_user_id: string | null;
+  permission: "view" | "edit";
+  password_hash: string | null;
+  expires_at: string | null;
+  max_downloads: number | null;
+  download_count: number;
+  view_count: number;
+  last_accessed_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
 export interface AuthUser {
   user: UserRow;
   session?: SessionRow;

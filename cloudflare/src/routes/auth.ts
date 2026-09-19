@@ -26,10 +26,10 @@ import {
   setPassword,
   toPublicUser,
 } from "../lib/auth";
-import { checkPasswordStrength, hashPassword, newId, randomToken, sha256Hex } from "../lib/crypto";
+import { checkPasswordStrength, hashPassword, randomToken, sha256Hex } from "../lib/crypto";
 import { all, first, isoAfter, isoDaysAfter, newId, nowIso, parseJson, run, stringifyJson } from "../lib/db";
 import { queueEmail, templates } from "../lib/email";
-import { ApiError, badRequest, forbidden, json, notFound, unauthorized, type Ctx } from "../lib/http";
+import { ApiError, badRequest, clientIp, forbidden, json, notFound, unauthorized, type Ctx } from "../lib/http";
 import { notify, record } from "../lib/events";
 import { enforceRateLimit } from "../lib/ratelimit";
 import { booleanSetting, getSettings, numericSetting } from "../lib/settings";

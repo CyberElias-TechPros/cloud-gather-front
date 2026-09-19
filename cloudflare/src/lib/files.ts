@@ -28,10 +28,29 @@ const KIND_EXTENSIONS: Record<string, string[]> = {
   code: ["js", "ts", "tsx", "jsx", "json", "html", "css", "py", "rb", "go", "rs", "java", "sh", "yml", "yaml", "toml", "sql"],
 };
 
+/**
+ * Narrows an unknown FormData entry to something with file semantics. The
+ * Workers runtime provides `File`, but `instanceof` is unreliable across
+ * realms, so the shape is checked instead.
+ */
+export function asFile(value: unknown): File | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { name?: unknown; size?: unknown; stream?: unknown; arrayBuffer?: unknown };
+  if (typeof candidate.name !== "string") return null;
+  if (typeof candidate.size !== "number") return null;
+  if (typeof candidate.stream !== "function" && typeof candidate.arrayBuffer !== "function") return null;
+  return value as File;
+}
+
 export function extensionOf(name: string): string {
   const index = name.lastIndexOf(".");
   if (index <= 0 || index === name.length - 1) return "";
   return name.slice(index + 1).toLowerCase();
+}
+
+/** Classifies by filename alone — used for provider entries that have no row yet. */
+export function kindFromName(name: string, mimeType?: string | null): string {
+  return fileKind({ is_folder: 0, mime_type: mimeType ?? null, name });
 }
 
 export function fileKind(row: Pick<FileRow, "is_folder" | "mime_type" | "name">): string {
@@ -220,6 +239,8 @@ export interface ListOptions {
   offset?: number;
   host?: "hosted" | "linked";
   providerId?: string;
+  /** True when the caller explicitly asked for a folder (including the root). */
+  explicitFolder?: boolean;
 }
 
 export interface ListResult {
@@ -239,10 +260,15 @@ export async function listFiles(env: Env, userId: string, options: ListOptions =
     where.push("trashed_at IS NOT NULL");
   } else {
     where.push("trashed_at IS NULL");
+    // A search spans the whole drive unless the caller named a folder; every
+    // other listing is scoped to the folder it is browsing.
+    const foldersOnly = !options.search || options.explicitFolder;
     if (options.folderId) {
-      where.push("parent_id = ?");
-      bindings.push(options.folderId);
-    } else if (options.folderId === null || options.folderId === undefined) {
+      if (foldersOnly) {
+        where.push("parent_id = ?");
+        bindings.push(options.folderId);
+      }
+    } else if (foldersOnly) {
       where.push("parent_id IS NULL");
     }
   }
@@ -606,7 +632,7 @@ export async function streamStoredFile(env: Env, row: FileRow, options: StreamOp
   }
 
   headers.set("content-length", String(object.size));
-  return new Response(object.body, { status, headers });
+  return new Response(object.body, { status: 200, headers });
 }
 
 export async function markAccessed(env: Env, fileId: string): Promise<void> {

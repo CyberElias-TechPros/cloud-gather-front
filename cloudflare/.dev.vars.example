@@ -1,4 +1,31 @@
-# Local development only — generated for this sandbox, never used in production.
-SESSION_SECRET="generate with: openssl rand -hex 32"
-TOKEN_ENCRYPTION_KEY="generate with: openssl rand -base64 32"
-ADMIN_EMAIL="you@example.com"
+# Local development only. Copy to `.dev.vars` (git-ignored) and fill in values.
+#   cp cloudflare/.dev.vars.example cloudflare/.dev.vars
+
+# Signs session cookies, OAuth state and share-unlock tokens.
+#   openssl rand -hex 32
+SESSION_SECRET=""
+
+# AES-256-GCM key that seals provider credentials before they touch the database.
+#   openssl rand -base64 32
+TOKEN_ENCRYPTION_KEY=""
+
+# The account with this address is promoted to administrator on first sign-in.
+ADMIN_EMAIL=""
+
+# Optional: transactional e-mail (password resets, share notifications).
+# Without it the API still works; messages are logged instead of delivered.
+RESEND_API_KEY=""
+EMAIL_FROM="CloudGather <noreply@cloudgather.app>"
+
+# Optional: lower the PBKDF2 cost factor for very slow machines (never below 10000).
+PASSWORD_ITERATIONS="210000"
+
+# Optional: provider OAuth apps, so users can connect real drives.
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+DROPBOX_CLIENT_ID=""
+DROPBOX_CLIENT_SECRET=""
+MICROSOFT_CLIENT_ID=""
+MICROSOFT_CLIENT_SECRET=""
+BOX_CLIENT_ID=""
+BOX_CLIENT_SECRET=""
