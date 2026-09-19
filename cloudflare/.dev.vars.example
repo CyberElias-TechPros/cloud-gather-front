@@ -1,0 +1,4 @@
+# Local development only — generated for this sandbox, never used in production.
+SESSION_SECRET="generate with: openssl rand -hex 32"
+TOKEN_ENCRYPTION_KEY="generate with: openssl rand -base64 32"
+ADMIN_EMAIL="you@example.com"

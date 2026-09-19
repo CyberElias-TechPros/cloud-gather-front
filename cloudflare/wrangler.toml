@@ -1,0 +1,63 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "cloudgather-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+workers_dev = true
+send_metrics = false
+upload_source_maps = true
+
+[observability]
+enabled = true
+
+[vars]
+ENVIRONMENT = "development"
+APP_NAME = "CloudGather"
+APP_URL = "http://localhost:8080"
+SUPPORT_EMAIL = "support@cloudgather.app"
+
+# Local development secrets live in `.dev.vars` (git-ignored).
+# Production secrets are set with `wrangler secret put`:
+#   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, RESEND_API_KEY, ADMIN_EMAIL, CORS_ALLOWED_ORIGINS
+#   GOOGLE_CLIENT_ID/SECRET, DROPBOX_CLIENT_ID/SECRET, MICROSOFT_CLIENT_ID/SECRET (optional)
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudgather"
+# Replaced by `npm run cf:provision` (see docs/DEPLOYMENT.md).
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "cloudgather-files"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[queues.producers]]
+binding = "JOBS"
+queue = "cloudgather-jobs"
+
+[[queues.consumers]]
+queue = "cloudgather-jobs"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "cloudgather-jobs-dlq"
+
+# Nightly housekeeping (03:00 UTC) and a light half-hourly sweep.
+[triggers]
+crons = ["*/30 * * * *", "0 3 * * *"]
+
+[env.production]
+name = "cloudgather-api"
+workers_dev = false
+routes = [{ pattern = "api.cloudgather.app", custom_domain = true }]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+APP_NAME = "CloudGather"
+APP_URL = "https://cloudgather.app"
+SUPPORT_EMAIL = "support@cloudgather.app"
+CORS_ALLOWED_ORIGINS = "https://cloudgather.app,https://www.cloudgather.app"

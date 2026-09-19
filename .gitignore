@@ -27,3 +27,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Cloudflare local dev secrets
+cloudflare/.dev.vars
+.wrangler/
+.dev.vars
