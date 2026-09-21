@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { useAuth, type ProfileUpdates } from "@/contexts/AuthContext";
 import { Seo } from "@/components/common/Seo";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -140,18 +140,7 @@ const SettingsPage: React.FC = () => {
   const handleExport = async () => {
     setExportBusy(true);
     try {
-      const [filesResult, providersResult, sharesResult] = await Promise.all([
-        supabase.from("files").select("*").order("path"),
-        supabase.from("storage_providers").select("provider_name, provider_user_email, status, total_space, used_space, created_at"),
-        supabase.from("file_shares").select("*"),
-      ]);
-      const payload = {
-        exported_at: new Date().toISOString(),
-        account: { email: user?.email, display_name: profile?.display_name },
-        files: filesResult.data ?? [],
-        providers: providersResult.data ?? [],
-        shares: sharesResult.data ?? [],
-      };
+      const payload = await api<Record<string, unknown>>("/export");
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -175,11 +164,7 @@ const SettingsPage: React.FC = () => {
     try {
       // The edge function verifies the caller's session and performs the full
       // cascade (files, objects, shares, keys, profile, auth user).
-      const { error } = await supabase.functions.invoke("delete-account", { method: "POST" });
-      if (error) {
-        toast.error(error.message || "Account deletion failed. Contact support so we can help.");
-        return;
-      }
+      await api("/account", { method: "DELETE" });
       toast.success("Your account has been deleted. Goodbye!");
       await signOut();
       navigate("/", { replace: true });

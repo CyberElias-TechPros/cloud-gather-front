@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 import { Logo } from "@/components/brand/Logo";
 import { Seo } from "@/components/common/Seo";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ const PASSWORD_MIN = 8;
  * and this form then sets the new password.
  */
 const ResetPasswordPage: React.FC = () => {
-  const { user, loading, updatePassword } = useAuth();
+  const token = new URLSearchParams(window.location.search).get("token");
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,12 +26,6 @@ const ResetPasswordPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Wait a moment for the recovery session to be established from the URL hash.
-  const [sessionWait, setSessionWait] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setSessionWait(false), 1500);
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,19 +37,16 @@ const ResetPasswordPage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const { error } = await updatePassword(password);
-      if (error) {
-        toast.error(error.message || "Could not update your password. The reset link may have expired.");
-        return;
-      }
-      toast.success("Password updated. You are now signed in.");
-      navigate("/dashboard", { replace: true });
+      await api("/auth/password/confirm", { method: "POST", body: JSON.stringify({ token, password }) });
+      toast.success("Password updated. Sign in with your new password.");
+      navigate("/login", { replace: true });
+    } catch (error) {
+      toast.error((error as Error).message || "Could not update your password.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const waiting = loading || sessionWait;
 
   return (
     <div className="flex min-h-screen flex-col bg-dotted">
@@ -70,12 +61,7 @@ const ResetPasswordPage: React.FC = () => {
             <CardDescription>Pick something strong you don&apos;t use anywhere else.</CardDescription>
           </CardHeader>
 
-          {waiting ? (
-            <CardContent className="flex items-center justify-center py-10" role="status" aria-live="polite">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
-              <span className="ml-3 text-sm text-muted-foreground">Verifying reset link…</span>
-            </CardContent>
-          ) : !user ? (
+          {!token ? (
             <CardContent className="space-y-4">
               <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
                 This reset link is invalid or has expired. Request a new one from the sign-in page.

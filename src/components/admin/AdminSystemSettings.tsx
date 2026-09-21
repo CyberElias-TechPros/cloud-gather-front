@@ -7,8 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Save, Loader2, ShieldAlert, RotateCcw } from "lucide-react";
 
@@ -50,14 +49,7 @@ const AdminSystemSettings = () => {
 
   const { data: settings, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["system-settings"],
-    queryFn: async (): Promise<SystemSetting[]> => {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("id, setting_key, setting_value, description")
-        .order("setting_key");
-      if (error) throw new Error(error.message);
-      return (data ?? []) as SystemSetting[];
-    },
+    queryFn: async (): Promise<SystemSetting[]> => (await api<{ settings: SystemSetting[] }>("/admin/settings")).settings,
   });
 
   useEffect(() => {
@@ -93,39 +85,14 @@ const AdminSystemSettings = () => {
 
   const saveMutation = useMutation({
     mutationFn: async (changes: { key: string; value: EditableValue; description: string | null }[]) => {
-      let parsedValue: unknown;
-      for (const change of changes) {
+      const parsed = changes.map((change) => {
         const kind = settingMeta[change.key]?.kind;
-        if (kind === "number") {
-          parsedValue = Number(change.value);
-          if (Number.isNaN(parsedValue)) throw new Error(`"${change.key}" must be a number.`);
-        } else if (kind === "json") {
-          try {
-            parsedValue = JSON.parse(String(change.value));
-          } catch {
-            throw new Error(`"${change.key}" contains invalid JSON.`);
-          }
-        } else if (typeof change.value === "boolean") {
-          parsedValue = change.value;
-        } else if (kind === "string") {
-          parsedValue = String(change.value);
-        } else {
-          // Unknown key: try JSON, fall back to string.
-          try {
-            parsedValue = JSON.parse(String(change.value));
-          } catch {
-            parsedValue = String(change.value);
-          }
-        }
-        const { error } = await supabase
-          .from("system_settings")
-          .update({
-            setting_value: parsedValue as Database["public"]["Tables"]["system_settings"]["Update"]["setting_value"],
-            updated_at: new Date().toISOString(),
-          })
-          .eq("setting_key", change.key);
-        if (error) throw new Error(`${change.key}: ${error.message}`);
-      }
+        let value: unknown = change.value;
+        if (kind === "number") { value = Number(change.value); if (Number.isNaN(value)) throw new Error(`"${change.key}" must be a number.`); }
+        else if (kind === "json") { try { value = JSON.parse(String(change.value)); } catch { throw new Error(`"${change.key}" contains invalid JSON.`); } }
+        return { key: change.key, value };
+      });
+      await api("/admin/settings", { method: "PATCH", body: JSON.stringify({ changes: parsed }) });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-settings"] });

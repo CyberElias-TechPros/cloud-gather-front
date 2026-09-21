@@ -8,9 +8,8 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
-      // Edge Functions run in Deno with URL imports — they are not part of the
-      // browser TS project and are validated separately (see supabase/README.md).
-      "supabase/functions",
+      // The Worker has its own Cloudflare typecheck command and runtime globals.
+      "worker",
     ],
   },
   {

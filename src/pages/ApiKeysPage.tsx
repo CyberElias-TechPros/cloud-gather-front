@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,21 +73,19 @@ const ApiKeysPage: React.FC = () => {
   const { data: keys, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["api-keys"],
     queryFn: async (): Promise<ApiKeyRow[]> => {
-      const { data, error } = await supabase.functions.invoke("api-key-management", { method: "GET" });
-      if (error) throw new Error(error.message || "Could not load API keys.");
-      return (data?.keys ?? []) as ApiKeyRow[];
+      const data = await api<{ keys: ApiKeyRow[] }>("/api-keys");
+      return data.keys;
     },
     staleTime: 30 * 1000,
   });
 
   const createKey = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("api-key-management", {
+      const data = await api<{ key: ApiKeyRow & { key: string } }>("/api-keys", {
         method: "POST",
-        body: { name: newName.trim(), permissions: Array.from(newPermissions) },
+        body: JSON.stringify({ name: newName.trim(), permissions: Array.from(newPermissions) }),
       });
-      if (error) throw new Error(error.message || "Could not create the key.");
-      return data as { apiKey: { key: string } };
+      return { apiKey: data.key };
     },
     onSuccess: (data) => {
       setCreatedKey(data.apiKey?.key ?? null);
@@ -101,11 +99,7 @@ const ApiKeysPage: React.FC = () => {
 
   const revokeKey = useMutation({
     mutationFn: async (keyId: string) => {
-      const { error } = await supabase.functions.invoke("api-key-management", {
-        method: "DELETE",
-        body: { id: keyId },
-      });
-      if (error) throw new Error(error.message || "Could not revoke the key.");
+      await api(`/api-keys/${keyId}`, { method: "DELETE" });
     },
     onSuccess: () => {
       toast.success("API key revoked");
