@@ -42,7 +42,7 @@ import {
 } from "@/services/files";
 import { PROVIDERS, getProviderMeta, getProviderName } from "@/lib/providers";
 import { formatBytes } from "@/lib/format";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const ProvidersPage: React.FC = () => {
@@ -104,10 +104,8 @@ const ProvidersPage: React.FC = () => {
     // operator configures credentials, surface an honest, actionable state.
     setConnectingBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke(`${providerId}-auth`, {
-        body: { action: "start", redirectTo: `${window.location.origin}/providers` },
-      });
-      if (error || !data?.url) {
+      const data = await api<{ url: string }>(`/providers/${providerId}/oauth?redirect=${encodeURIComponent(`${window.location.origin}/providers`)}`);
+      if (!data?.url) {
         toast.error(
           `${getProviderName(providerId)} sign-in isn't configured yet on this deployment. An operator needs to add the ${getProviderName(providerId)} OAuth credentials (see the deployment guide).`,
           { duration: 7000 }
@@ -140,13 +138,10 @@ const ProvidersPage: React.FC = () => {
     try {
       // Credentials-based providers are stored through the sync-auth edge
       // function, which validates and normalizes them server-side.
-      const { error } = await supabase.functions.invoke("sync-auth", {
-        body: { provider: credentialsTarget, credentials: credentialValues },
+      await api("/providers/connect", {
+        method: "POST",
+        body: JSON.stringify({ provider: credentialsTarget, credentials: credentialValues }),
       });
-      if (error) {
-        toast.error(error.message || `Could not connect ${meta.name}.`);
-        return;
-      }
       toast.success(`${meta.name} connected`);
       setCredentialsTarget(null);
       setCredentialValues({});

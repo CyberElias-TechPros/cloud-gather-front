@@ -11,7 +11,12 @@
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cf:dev": "wrangler dev --local --port 8787",
+    "cf:typecheck": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022 --types @cloudflare/workers-types worker/src/index.ts",
+    "cf:migrate:local": "wrangler d1 migrations apply cloudgather --local",
+    "cf:migrate:remote": "wrangler d1 migrations apply cloudgather --remote",
+    "cf:deploy": "wrangler deploy"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",
@@ -29,7 +34,6 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-switch": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
-    "@supabase/supabase-js": "^2.49.4",
     "@tanstack/react-query": "^5.56.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -44,6 +48,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
     "@eslint/js": "^9.9.0",
     "@tailwindcss/typography": "^0.5.15",
     "@testing-library/jest-dom": "^6.4.8",
@@ -64,6 +69,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
-    "vitest": "^2.1.1"
+    "vitest": "^2.1.1",
+    "wrangler": "^4.135.0"
   }
 }

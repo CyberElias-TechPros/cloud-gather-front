@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Users, FileText, HardDrive, Activity, AlertCircle, Newspaper } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
 interface AdminStats {
@@ -19,32 +19,7 @@ interface AdminStats {
 const AdminDashboard = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin-stats"],
-    queryFn: async (): Promise<AdminStats> => {
-      const [users, files, providers, blog, activity] = await Promise.all([
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("files").select("id", { count: "exact", head: true }),
-        supabase.from("storage_providers").select("id", { count: "exact", head: true }),
-        supabase.from("blog_posts").select("id", { count: "exact", head: true }),
-        supabase
-          .from("audit_logs")
-          .select("id, action, resource_type, created_at")
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
-
-      // Under RLS a blocked count surfaces as an error — track it so the UI can
-      // be honest about degraded data instead of silently showing zeros.
-      const failed = [users.error, files.error, providers.error, blog.error].some(Boolean);
-
-      return {
-        userCount: users.count ?? 0,
-        fileCount: files.count ?? 0,
-        providerCount: providers.count ?? 0,
-        blogCount: blog.count ?? 0,
-        recentActivities: (activity.data ?? []) as AdminStats["recentActivities"],
-        degraded: failed,
-      };
-    },
+    queryFn: () => api<AdminStats>("/admin/stats"),
     refetchInterval: 60 * 1000,
   });
 

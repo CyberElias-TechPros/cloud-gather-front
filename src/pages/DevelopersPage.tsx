@@ -69,7 +69,7 @@ const DevelopersPage: React.FC = () => {
           <code className="rounded bg-muted px-1.5 py-0.5 text-[13px]">write</code>, <code className="rounded bg-muted px-1.5 py-0.5 text-[13px]">share</code>) and can be revoked at any time.
         </p>
         <div className="mt-5">
-          <CodeBlock label="Example request">{`curl "https://YOUR_PROJECT.supabase.co/functions/v1/storage-api/api/v1/files" \\
+          <CodeBlock label="Example request">{`curl "https://api.cloudgather.com/api/files" \\
   -H "x-api-key: cg_YOUR_KEY"`}</CodeBlock>
         </div>
         <div className="mt-6 flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
@@ -121,19 +121,19 @@ const DevelopersPage: React.FC = () => {
             <TabsTrigger value="share">Share</TabsTrigger>
           </TabsList>
           <TabsContent value="list" className="mt-4">
-            <CodeBlock label="GET /api/v1/files">{`curl "https://YOUR_PROJECT.supabase.co/functions/v1/storage-api/api/v1/files?sort=name&direction=asc" \\
+            <CodeBlock label="GET /api/v1/files">{`curl "https://api.cloudgather.com/api/files?sort=name&direction=asc" \\
   -H "x-api-key: cg_YOUR_KEY"
 
 # → { "files": [ { "id": "…", "filename": "invoice.pdf", "size": 81234,
 #                  "mime_type": "application/pdf", "is_folder": false, … } ] }`}</CodeBlock>
           </TabsContent>
           <TabsContent value="upload" className="mt-4">
-            <CodeBlock label="POST /api/v1/files/upload">{`curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/storage-api/api/v1/files/upload" \\
+            <CodeBlock label="POST /api/v1/files/upload">{`curl -X POST "https://api.cloudgather.com/api/files/upload" \\
   -H "x-api-key: cg_YOUR_KEY" \\
   -F "file=@report.pdf"`}</CodeBlock>
           </TabsContent>
           <TabsContent value="share" className="mt-4">
-            <CodeBlock label="POST /api/v1/files/:id/share">{`curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/storage-api/api/v1/files/FILE_ID/share" \\
+            <CodeBlock label="POST /api/v1/files/:id/share">{`curl -X POST "https://api.cloudgather.com/api/files/FILE_ID/share" \\
   -H "x-api-key: cg_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"email":"teammate@example.com","permissionLevel":"view"}'`}</CodeBlock>

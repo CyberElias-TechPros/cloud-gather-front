@@ -15,7 +15,6 @@ export default defineConfig(() => ({
       output: {
         manualChunks: {
           react: ["react", "react-dom", "react-router-dom"],
-          supabase: ["@supabase/supabase-js"],
           "ui-vendor": [
             "@radix-ui/react-dialog",
             "@radix-ui/react-dropdown-menu",
@@ -41,8 +40,7 @@ export default defineConfig(() => ({
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
     env: {
-      VITE_SUPABASE_URL: "https://test-project.supabase.co",
-      VITE_SUPABASE_PUBLISHABLE_KEY: "test-anon-key",
+      VITE_API_URL: "http://localhost:8787/api",
       VITE_PUBLIC_SITE_URL: "http://localhost:8080",
     },
   },

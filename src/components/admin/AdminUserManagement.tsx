@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Search, UserPlus, UserMinus, Shield, ShieldAlert, Loader2 } from "lucide-react";
@@ -44,56 +44,20 @@ const AdminUserManagement = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const profilesQuery = useQuery({
-    queryKey: ["admin-profiles", searchTerm],
-    queryFn: async () => {
-      let query = supabase
-        .from("profiles")
-        .select("id, display_name, role, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (searchTerm) {
-        query = query.or(`display_name.ilike.%${searchTerm}%`);
-      }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return (data ?? []) as ProfileRow[];
-    },
+  const usersQuery = useQuery({
+    queryKey: ["admin-users", searchTerm],
+    queryFn: () => api<{ users: ProfileRow[]; admins: AdminRow[] }>(`/admin/users?search=${encodeURIComponent(searchTerm)}`),
   });
-
-  const adminUsersQuery = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("admin_users").select("*").order("created_at", { ascending: true });
-      if (error) throw new Error(error.message);
-      return (data ?? []) as AdminRow[];
-    },
-  });
-
+  const profilesQuery = { ...usersQuery, data: usersQuery.data?.users };
+  const adminUsersQuery = { ...usersQuery, data: usersQuery.data?.admins };
   const addAdminMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase.from("admin_users").insert({ email: email.trim().toLowerCase() });
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      toast.success("Admin added");
-      setNewAdminEmail("");
-      setIsAddingAdmin(false);
-    },
+    mutationFn: (email: string) => api("/admin/users/role", { method: "POST", body: JSON.stringify({ email: email.trim().toLowerCase(), role: "admin" }) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-users"] }); toast.success("Admin added"); setNewAdminEmail(""); setIsAddingAdmin(false); },
     onError: (error: Error) => toast.error(error.message),
   });
-
   const removeAdminMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase.from("admin_users").delete().eq("email", email);
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      toast.success("Admin removed");
-      setRemoveTarget(null);
-    },
+    mutationFn: (email: string) => api("/admin/users/role", { method: "POST", body: JSON.stringify({ email, role: "user" }) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-users"] }); toast.success("Admin removed"); setRemoveTarget(null); },
     onError: (error: Error) => toast.error(error.message),
   });
 
