@@ -11,6 +11,8 @@ import {
   Grid,
   Home,
   Info,
+  Bookmark,
+  BookmarkPlus,
   List,
   Loader2,
   MoreVertical,
@@ -50,6 +52,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -62,6 +65,9 @@ import {
   copyFile,
   createFolder,
   deleteFile,
+  deleteSavedSearch,
+  listSavedSearches,
+  saveSearch,
   downloadFile,
   getFile,
   getFolderPath,
@@ -142,6 +148,8 @@ const FilesPage: React.FC = () => {
   const [detailsTarget, setDetailsTarget] = React.useState<FileItem | null>(null);
   const [previewTarget, setPreviewTarget] = React.useState<FileItem | null>(null);
   const [moveState, setMoveState] = React.useState<{ items: FileItem[]; mode: "move" | "copy" } | null>(null);
+  const [saveSearchOpen, setSaveSearchOpen] = React.useState(false);
+  const [saveSearchName, setSaveSearchName] = React.useState("");
 
   /* ------------------------------------------------------------ queries */
 
@@ -191,6 +199,41 @@ const FilesPage: React.FC = () => {
     queryFn: () => getFolderPath(folderId!),
     enabled: Boolean(folderId),
   });
+
+  /* Saved searches: persist a query + its filters so it can be recalled later. */
+  const savedSearches = useQuery({ queryKey: ["saved-searches"], queryFn: listSavedSearches });
+
+  const createSavedSearch = useMutation({
+    mutationFn: () => saveSearch(saveSearchName.trim(), debounced, { category, filter }),
+    onSuccess: () => {
+      toast.success("Search saved");
+      setSaveSearchOpen(false);
+      setSaveSearchName("");
+      queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const removeSavedSearch = useMutation({
+    mutationFn: (savedId: string) => deleteSavedSearch(savedId),
+    onSuccess: () => {
+      toast.success("Saved search removed");
+      queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  /** Restores a saved search into the toolbar controls. */
+  const applySavedSearch = (saved: { query: string; filters: string }) => {
+    setSearch(saved.query);
+    try {
+      const parsed = JSON.parse(saved.filters || "{}") as { category?: string; filter?: string };
+      setCategory(parsed.category ?? "");
+      setFilter((parsed.filter as typeof filter) ?? "");
+    } catch {
+      /* filters are best-effort — a malformed blob just restores the text query */
+    }
+  };
 
   /* Deep link to a single file (?file=<id>) opens its preview. */
   const deepLinkId = params.get("file");
@@ -562,6 +605,61 @@ const FilesPage: React.FC = () => {
           ) : null}
         </div>
 
+        {/* Saved searches: store the current query + filters, or recall one. */}
+        <div className="flex gap-2">
+          {searching ? (
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Save this search"
+              title="Save this search"
+              onClick={() => {
+                setSaveSearchName(debounced.slice(0, 40));
+                setSaveSearchOpen(true);
+              }}
+            >
+              <BookmarkPlus className="h-4 w-4" />
+            </Button>
+          ) : null}
+
+          {(savedSearches.data?.length ?? 0) > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Saved searches" title="Saved searches">
+                  <Bookmark className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Saved searches</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {savedSearches.data?.map((saved) => (
+                  <DropdownMenuItem
+                    key={saved.id}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      applySavedSearch(saved);
+                    }}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{saved.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`Delete saved search ${saved.name}`}
+                      className="rounded p-1 text-muted-foreground hover:text-destructive"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeSavedSearch.mutate(saved.id);
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
+
         <Select value={filter || "all"} onValueChange={(value) => setFilter(value === "all" ? "" : (value as typeof filter))}>
           <SelectTrigger className="w-full sm:w-36" aria-label="Filter">
             <SelectValue />
@@ -906,6 +1004,38 @@ const FilesPage: React.FC = () => {
             </Button>
             <Button onClick={() => makeFolder.mutate()} disabled={makeFolder.isPending || !newFolderName.trim()}>
               {makeFolder.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save current search */}
+      <Dialog open={saveSearchOpen} onOpenChange={setSaveSearchOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save this search</DialogTitle>
+            <DialogDescription>
+              Stores the query “{debounced}” together with the current type and status filters so you can run it again
+              in one click.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="saved-search-name">Name</Label>
+            <Input
+              id="saved-search-name"
+              autoFocus
+              value={saveSearchName}
+              onChange={(event) => setSaveSearchName(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && saveSearchName.trim() && createSavedSearch.mutate()}
+              placeholder="Contracts awaiting signature"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveSearchOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => createSavedSearch.mutate()} disabled={createSavedSearch.isPending || !saveSearchName.trim()}>
+              {createSavedSearch.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save search
             </Button>
           </DialogFooter>
         </DialogContent>

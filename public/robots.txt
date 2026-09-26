@@ -11,7 +11,16 @@ Disallow: /recents
 Disallow: /settings
 Disallow: /api-keys
 Disallow: /admin
+Disallow: /shared
+Disallow: /trash
+Disallow: /notifications
+Disallow: /webhooks
+Disallow: /billing
 Disallow: /reset-password
 Disallow: /auth
+Disallow: /verify-email
+Disallow: /unsubscribe
+Disallow: /l/
+Disallow: /s/
 
 Sitemap: https://cloudgather.app/sitemap.xml
