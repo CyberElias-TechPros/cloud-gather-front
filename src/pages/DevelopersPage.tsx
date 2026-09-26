@@ -159,7 +159,7 @@ const DevelopersPage: React.FC = () => {
                 <TabsTrigger value="python">Python</TabsTrigger>
               </TabsList>
               <TabsContent value="curl" className="mt-3">
-                <CodeBlock label="List the 20 most recent files">{`curl "${base}/api/v1/files?limit=20&sort=updated_at" \\
+                <CodeBlock label="List the 20 most recent files">{`curl "${base}/api/v1/files?limit=20&sort=updated_at&direction=desc" \\
   -H "X-API-Key: $CLOUDGATHER_API_KEY"`}</CodeBlock>
               </TabsContent>
               <TabsContent value="node" className="mt-3">
@@ -186,22 +186,28 @@ print(res.json()["total"])`}</CodeBlock>
 
             <div className="space-y-3">
               <h3 className="text-lg font-semibold">Uploading a file</h3>
-              <CodeBlock label="multipart/form-data">{`curl -X POST "${base}/api/v1/uploads" \\
+              <CodeBlock label="multipart/form-data">{`curl -X POST "${base}/api/v1/files/upload" \\
   -H "X-API-Key: $CLOUDGATHER_API_KEY" \\
   -F "file=@report.pdf" \\
-  -F "folder_id=fld_123"`}</CodeBlock>
+  -F "parent_id=$FOLDER_ID"`}</CodeBlock>
               <p className="text-sm text-muted-foreground">
-                Files larger than the single-shot limit use the multipart flow: <code>POST /api/uploads/multipart</code>{" "}
-                to start, <code>PUT</code> each part, then <code>POST …/complete</code>.
+                Files larger than the single-shot limit use the resumable flow:{" "}
+                <code>POST /api/v1/uploads</code> to start, <code>PUT /api/v1/uploads/:id/parts/:part</code> for each
+                chunk, then <code>POST /api/v1/uploads/:id/complete</code>.
               </p>
             </div>
 
             <div className="space-y-3">
               <h3 className="text-lg font-semibold">Creating a share link</h3>
-              <CodeBlock label="JSON body">{`curl -X POST "${base}/api/v1/shares/links" \\
+              <CodeBlock label="JSON body">{`curl -X POST "${base}/api/v1/files/$FILE_ID/links" \\
   -H "X-API-Key: $CLOUDGATHER_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_id":"fil_123","expires_in_days":7,"password":"optional","max_downloads":50}'`}</CodeBlock>
+  -d '{"expires_in_days":7,"password":"optional","max_downloads":50}'`}</CodeBlock>
+              <p className="text-sm text-muted-foreground">
+                The response contains a <code>token</code>; the shareable URL is{" "}
+                <code>{`${window.location.origin}/l/<token>`}</code>. Sharing with a specific person instead uses{" "}
+                <code>POST /api/v1/files/:id/shares</code> with an email address.
+              </p>
             </div>
           </div>
 
