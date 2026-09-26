@@ -1,17 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 import NotFound from "./NotFound";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { renderWithProviders } from "@/test/utils";
 
 describe("NotFound", () => {
   beforeEach(() => localStorage.clear());
+
   it("explains that the route does not exist", () => {
-    render(<MemoryRouter><AuthProvider><NotFound /></AuthProvider></MemoryRouter>);
+    renderWithProviders(<NotFound />, { route: "/does-not-exist" });
     expect(screen.getByRole("heading", { name: /page not found/i })).toBeInTheDocument();
   });
+
   it("offers a route home", () => {
-    render(<MemoryRouter><AuthProvider><NotFound /></AuthProvider></MemoryRouter>);
+    renderWithProviders(<NotFound />, { route: "/does-not-exist" });
     expect(screen.getByRole("link", { name: /back to home/i })).toHaveAttribute("href", "/");
   });
 });

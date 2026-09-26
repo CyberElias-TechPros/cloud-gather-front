@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 import { mainNav, footerNav, siteConfig } from "@/lib/site";
+import { NewsletterForm } from "@/components/common/NewsletterForm";
 import { cn } from "@/lib/utils";
 
 /**
@@ -109,6 +110,11 @@ export const MarketingLayout: React.FC<{ children: React.ReactNode }> = ({ child
             <div className="space-y-3">
               <Logo />
               <p className="max-w-xs text-sm text-muted-foreground">{siteConfig.tagline}. Bring every cloud storage account into one fast, private workspace.</p>
+              <div className="max-w-xs pt-1">
+                <h2 className="text-sm font-semibold">Product updates</h2>
+                <p className="mb-2 text-xs text-muted-foreground">Occasional release notes. No spam, unsubscribe in one click.</p>
+                <NewsletterForm source="footer" />
+              </div>
             </div>
             {footerNav.map((group) => (
               <nav key={group.title} aria-label={group.title}>

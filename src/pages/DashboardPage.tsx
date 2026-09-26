@@ -1,295 +1,307 @@
-import React, { useEffect, useState } from "react";
-import { Seo } from "@/components/common/Seo";
-import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/AuthContext";
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  listAllFiles,
-  listProviders,
-  listActivity,
-  type ActivityEvent,
-  type StorageProvider,
-} from "@/services/files";
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Cloud,
+  FileText,
+  FolderOpen,
+  HardDrive,
+  Loader2,
+  Share2,
+  Sparkles,
+  TriangleAlert,
+  Upload,
+  Users,
+} from "lucide-react";
+import { Seo } from "@/components/common/Seo";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/AuthContext";
+import { completeOnboarding, getDashboard, getOnboarding } from "@/services/account";
 import { formatBytes, formatRelativeTime } from "@/lib/format";
 import { getProviderIcon, getProviderName } from "@/lib/providers";
-import {
-  Files,
-  HardDrive,
-  Cloud,
-  Share2,
-  Upload,
-  Download,
-  Share,
-  Star,
-  FolderPlus,
-  Trash2,
-  CloudUpload,
-  ArrowRight,
-  AlertCircle,
-} from "lucide-react";
+import { fileIconFor } from "@/lib/fileIcons";
+import { errorMessage } from "@/lib/api";
+import { toast } from "sonner";
 
-interface Stats {
-  totalFiles: number;
-  totalFolders: number;
-  usedStorage: number;
-  totalStorage: number;
-  connectedProviders: number;
-  sharedFiles: number;
-  starredFiles: number;
-}
-
-const actionIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  file_uploaded: Upload,
-  file_downloaded: Download,
-  file_shared: Share,
-  file_starred: Star,
-  folder_created: FolderPlus,
-  file_deleted: Trash2,
+const StatCard: React.FC<{
+  label: string;
+  value: string;
+  hint?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  to?: string;
+}> = ({ label, value, hint, icon: Icon, to }) => {
+  const body = (
+    <Card className="h-full transition-colors hover:border-primary/40">
+      <CardContent className="flex items-center gap-4 p-5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="truncate text-xl font-semibold">{value}</p>
+          {hint ? <p className="truncate text-xs text-muted-foreground">{hint}</p> : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+  return to ? <Link to={to}>{body}</Link> : body;
 };
 
-const actionLabels: Record<string, string> = {
-  file_uploaded: "Uploaded",
-  file_downloaded: "Downloaded",
-  file_shared: "Shared",
-  file_starred: "Starred",
-  folder_created: "Created folder",
-  file_deleted: "Deleted",
-  provider_connected: "Connected provider",
-  provider_disconnected: "Disconnected provider",
-};
-
+/** Home screen for signed-in users: usage, onboarding, recent work. */
 const DashboardPage: React.FC = () => {
-  const { user, profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({
-    totalFiles: 0,
-    totalFolders: 0,
-    usedStorage: 0,
-    totalStorage: 0,
-    connectedProviders: 0,
-    sharedFiles: 0,
-    starredFiles: 0,
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
+  const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: getOnboarding });
+
+  const finishOnboarding = useMutation({
+    mutationFn: completeOnboarding,
+    onSuccess: () => {
+      toast.success("Setup complete — happy gathering!");
+      queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
   });
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
-  const [providers, setProviders] = useState<StorageProvider[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [files, providerRows, activityRows] = await Promise.all([
-          listAllFiles(),
-          listProviders(),
-          listActivity(8).catch(() => [] as ActivityEvent[]),
-        ]);
-        if (cancelled) return;
-        const connected = providerRows.filter((p) => p.status === "connected");
-        setStats({
-          totalFiles: files.filter((f) => !f.is_folder).length,
-          totalFolders: files.filter((f) => f.is_folder).length,
-          usedStorage: files.reduce((acc, f) => acc + (f.size || 0), 0),
-          totalStorage: connected.reduce((acc, p) => acc + (p.total_space || 0), 0),
-          connectedProviders: connected.length,
-          sharedFiles: files.filter((f) => f.is_shared).length,
-          starredFiles: files.filter((f) => f.is_starred).length,
-        });
-        setProviders(connected);
-        setActivity(activityRows);
-      } catch (err) {
-        if (!cancelled) setError((err as Error).message || "Failed to load your dashboard.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
+  const data = dashboard.data;
+  const usage = data?.entitlements?.usage;
+  const limits = data?.entitlements?.limits;
+  const percent = data?.entitlements?.storage_percent ?? 0;
+  const firstName = (user?.display_name || user?.email || "there").split(/[\s@]/)[0];
+  const steps = onboarding.data?.steps ?? [];
+  const remaining = steps.filter((step) => !step.done && !step.optional);
 
-  const firstName = (profile?.display_name || user?.email?.split("@")[0] || "there").split(" ")[0];
-  const usagePercent = stats.totalStorage > 0 ? Math.min(100, Math.round((stats.usedStorage / stats.totalStorage) * 100)) : 0;
-
-  if (loading) {
+  if (dashboard.isError) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-64" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
+        <PageHeader title="Dashboard" />
+        <Alert variant="destructive">
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>We couldn&apos;t load your dashboard</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3">
+            <span>{errorMessage(dashboard.error)}</span>
+            <Button variant="outline" className="w-fit" onClick={() => dashboard.refetch()}>
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="border-destructive/30">
-        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-          <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
-          <p className="font-medium">Couldn&apos;t load your dashboard</p>
-          <p className="max-w-md text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" onClick={() => window.location.reload()}>Reload</Button>
-        </CardContent>
-      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Seo title="Dashboard" description="CloudGather dashboard" path="/dashboard" noIndex />
-      <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Welcome back, {firstName}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {stats.totalFiles === 0
-              ? "Your workspace is ready — connect a provider or upload your first file."
-              : `You have ${stats.totalFiles.toLocaleString()} file${stats.totalFiles === 1 ? "" : "s"} across ${stats.connectedProviders} connected provider${stats.connectedProviders === 1 ? "" : "s"}.`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link to="/providers">
-              <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" /> Connect provider
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/files">Browse files</Link>
-          </Button>
-        </div>
-      </header>
+      <Seo title="Dashboard" description="Your CloudGather workspace at a glance." path="/dashboard" noIndex />
 
-      {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Storage summary">
-        {[
-          { icon: Files, label: "Files", value: stats.totalFiles.toLocaleString(), sub: `${stats.totalFolders} folders` },
-          { icon: HardDrive, label: "Storage used", value: formatBytes(stats.usedStorage), sub: stats.totalStorage > 0 ? `${usagePercent}% of ${formatBytes(stats.totalStorage)}` : "across providers" },
-          { icon: Cloud, label: "Providers", value: String(stats.connectedProviders), sub: stats.connectedProviders === 0 ? "none connected yet" : "connected" },
-          { icon: Share2, label: "Shared", value: String(stats.sharedFiles), sub: `${stats.starredFiles} starred` },
-        ].map((card) => (
-          <Card key={card.label}>
-            <CardContent className="flex items-center gap-4 p-5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <card.icon className="h-5 w-5 text-primary" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{card.label}</p>
-                <p className="truncate text-xl font-bold">{card.value}</p>
-                <p className="truncate text-xs text-muted-foreground">{card.sub}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <PageHeader
+        title={`Welcome back, ${firstName}`}
+        description="Everything across your connected clouds, in one place."
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate("/providers")}>
+              <Cloud className="mr-2 h-4 w-4" /> Connect a drive
+            </Button>
+            <Button onClick={() => navigate("/files?upload=1")}>
+              <Upload className="mr-2 h-4 w-4" /> Upload files
+            </Button>
+          </>
+        }
+      />
+
+      {data?.announcement ? (
+        <Alert>
+          <Sparkles className="h-4 w-4" />
+          <AlertTitle>{data.announcement.title}</AlertTitle>
+          <AlertDescription>{data.announcement.body}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {/* Onboarding checklist */}
+      {!onboarding.isLoading && steps.length > 0 && !data?.onboarding_complete ? (
+        <Card className="border-primary/30 bg-primary/[0.03]">
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle className="text-lg">Finish setting up</CardTitle>
+              <CardDescription>
+                {remaining.length === 0
+                  ? "All done — mark your setup as complete."
+                  : `${remaining.length} step${remaining.length === 1 ? "" : "s"} left to get the most out of CloudGather.`}
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant={remaining.length === 0 ? "default" : "ghost"}
+              onClick={() => finishOnboarding.mutate()}
+              disabled={finishOnboarding.isPending}
+            >
+              {finishOnboarding.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {remaining.length === 0 ? "Mark complete" : "Skip for now"}
+            </Button>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            {steps.map((step) => (
+              <Link
+                key={step.id}
+                to={step.href}
+                className="flex items-center gap-3 rounded-lg border bg-background p-3 text-sm transition-colors hover:border-primary/40"
+              >
+                {step.done ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+                ) : (
+                  <Circle className="h-5 w-5 shrink-0 text-muted-foreground" />
+                )}
+                <span className={step.done ? "text-muted-foreground line-through" : "font-medium"}>{step.label}</span>
+                {step.optional ? <Badge variant="outline" className="ml-auto text-[10px]">Optional</Badge> : null}
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {dashboard.isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[92px] w-full rounded-xl" />)
+        ) : (
+          <>
+            <StatCard
+              label="Files"
+              value={String(usage?.fileCount ?? 0)}
+              hint={`${usage?.folderCount ?? 0} folders`}
+              icon={FileText}
+              to="/files"
+            />
+            <StatCard
+              label="Storage used"
+              value={formatBytes(usage?.storageBytes ?? 0)}
+              hint={limits ? `of ${formatBytes(limits.storageBytes)}` : undefined}
+              icon={HardDrive}
+              to="/storage"
+            />
+            <StatCard
+              label="Connected drives"
+              value={String(usage?.providerCount ?? 0)}
+              hint={limits ? `up to ${limits.maxProviders}` : undefined}
+              icon={Cloud}
+              to="/providers"
+            />
+            <StatCard
+              label="Shares"
+              value={String(usage?.shareCount ?? 0)}
+              hint={`${usage?.publicLinkCount ?? 0} public links`}
+              icon={Share2}
+              to="/shared"
+            />
+          </>
+        )}
       </div>
 
-      {stats.totalStorage > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pool usage — {formatBytes(stats.usedStorage)} of {formatBytes(stats.totalStorage)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={usagePercent} aria-valuemin={0} aria-valuemax={100}>
-              <div
-                className={`h-full rounded-full transition-all ${usagePercent > 90 ? "bg-destructive" : "bg-gradient-to-r from-primary to-accent"}`}
-                style={{ width: `${Math.max(usagePercent, 1)}%` }}
-              />
+      {/* Storage meter */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-lg">Storage</CardTitle>
+              <CardDescription>
+                {formatBytes(usage?.storageBytes ?? 0)} of {formatBytes(limits?.storageBytes ?? 0)} used on the{" "}
+                <span className="capitalize">{data?.entitlements?.plan?.name ?? "Free"}</span> plan
+              </CardDescription>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            {data?.billing_enabled ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/billing">
+                  Manage plan <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Progress value={Math.min(percent, 100)} className="h-2" />
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span>{percent.toFixed(1)}% used</span>
+            {usage?.trashBytes ? (
+              <span>
+                {formatBytes(usage.trashBytes)} in <Link className="underline" to="/trash">trash</Link>
+              </span>
+            ) : null}
+          </div>
+          {percent >= 90 ? (
+            <Alert variant="destructive">
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>You&apos;re nearly out of space</AlertTitle>
+              <AlertDescription>
+                Empty your trash or{" "}
+                <Link className="underline" to="/billing">upgrade your plan</Link> to keep uploading.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Recent activity */}
-        <Card>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Recent files */}
+        <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-base">Recent activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activity.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No activity yet. Upload a file or connect a provider to get started.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {activity.map((event) => {
-                  const Icon = actionIcons[event.action] ?? Files;
-                  const details = (event.details ?? {}) as { filename?: string; provider?: string };
-                  return (
-                    <li key={event.id} className="flex items-center gap-3 text-sm">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium">{actionLabels[event.action] ?? event.action}</span>
-                        {details.filename && <span className="text-muted-foreground"> · {details.filename}</span>}
-                      </div>
-                      <time className="shrink-0 text-xs text-muted-foreground" dateTime={event.created_at}>
-                        {formatRelativeTime(event.created_at)}
-                      </time>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Connected providers */}
-        <Card>
-          <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-base">Connected providers</CardTitle>
+            <CardTitle className="text-lg">Recent files</CardTitle>
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/providers">
-                Manage <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
-              </Link>
+              <Link to="/recents">View all</Link>
             </Button>
           </CardHeader>
           <CardContent>
-            {providers.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No providers connected yet. Connect Google Drive, Dropbox or S3 to see all your files here.
-                </p>
-                <Button className="mt-4" variant="outline" asChild>
-                  <Link to="/providers">
-                    Connect your first provider <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                  </Link>
-                </Button>
+            {dashboard.isLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-12 w-full" />)}
               </div>
+            ) : (data?.recent_files?.length ?? 0) === 0 ? (
+              <EmptyState
+                icon={FolderOpen}
+                title="No files yet"
+                description="Upload a file or connect a cloud drive to see your content here."
+                action={
+                  <Button onClick={() => navigate("/files?upload=1")}>
+                    <Upload className="mr-2 h-4 w-4" /> Upload your first file
+                  </Button>
+                }
+              />
             ) : (
-              <ul className="space-y-3">
-                {providers.slice(0, 6).map((provider) => {
-                  const Icon = getProviderIcon(provider.provider_name);
-                  const used = provider.used_space ?? 0;
-                  const total = provider.total_space ?? 0;
-                  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+              <ul className="divide-y">
+                {data?.recent_files?.slice(0, 8).map((file) => {
+                  const Icon = fileIconFor(file);
                   return (
-                    <li key={provider.id} className="flex items-center gap-3">
-                      <Icon className={`h-5 w-5 shrink-0 ${"text-muted-foreground"}`} aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="truncate font-medium">{getProviderName(provider.provider_name)}</span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {total > 0 ? `${formatBytes(used)} / ${formatBytes(total)}` : formatBytes(used)}
+                    <li key={file.id}>
+                      <Link
+                        to={file.is_folder ? `/files/${file.id}` : `/files?file=${file.id}`}
+                        className="flex items-center gap-3 py-2.5 transition-colors hover:bg-muted/40"
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{file.filename}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {file.is_folder ? "Folder" : formatBytes(file.size)} ·{" "}
+                            {formatRelativeTime(file.updated_at || file.created_at)}
                           </span>
-                        </div>
-                        {total > 0 && (
-                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(pct, 1)}%` }} />
-                          </div>
-                        )}
-                      </div>
+                        </span>
+                        {file.provider_name ? (
+                          <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+                            {getProviderName(file.provider_name)}
+                          </Badge>
+                        ) : null}
+                      </Link>
                     </li>
                   );
                 })}
@@ -297,6 +309,107 @@ const DashboardPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Side column */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-lg">Connected drives</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/providers">Manage</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {(data?.providers?.length ?? 0) === 0 ? (
+                <EmptyState
+                  className="border-0 px-0 py-6"
+                  icon={Cloud}
+                  title="No drives connected"
+                  description="Bring Google Drive, Dropbox, OneDrive, S3 and more into one library."
+                  action={
+                    <Button size="sm" onClick={() => navigate("/providers")}>
+                      Connect a drive
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="space-y-3">
+                  {data?.providers?.map((provider) => {
+                    const Icon = getProviderIcon(provider.provider_name);
+                    return (
+                      <li key={provider.id} className="flex items-center gap-3">
+                        <Icon className="h-6 w-6 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {provider.display_name || getProviderName(provider.provider_name)}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {provider.file_count} files
+                            {provider.used_space ? ` · ${formatBytes(provider.used_space)}` : ""}
+                          </p>
+                        </div>
+                        <Badge variant={provider.status === "error" ? "destructive" : "secondary"}>
+                          {provider.status}
+                        </Badge>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-lg">Shared with me</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/shared">View</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {(data?.shared_with_me?.length ?? 0) === 0 ? (
+                <p className="py-2 text-sm text-muted-foreground">Nothing has been shared with you yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {data?.shared_with_me?.slice(0, 5).map((share) => (
+                    <li key={share.id} className="flex items-center gap-3">
+                      <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{share.filename}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          from {share.shared_by} · {share.permission_level}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Recent activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(data?.recent_activity?.length ?? 0) === 0 ? (
+                <p className="py-2 text-sm text-muted-foreground">Your account activity will appear here.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {data?.recent_activity?.slice(0, 6).map((event) => (
+                    <li key={event.id} className="flex items-start gap-3 text-sm">
+                      <Activity className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium capitalize">{event.action.replace(/[._]/g, " ")}</p>
+                        <p className="text-xs text-muted-foreground">{formatRelativeTime(event.created_at)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

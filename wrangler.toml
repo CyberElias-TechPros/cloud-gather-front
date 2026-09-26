@@ -1,12 +1,25 @@
 name = "cloudgather-api"
 main = "worker/src/index.ts"
 compatibility_date = "2026-09-21"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# ---------------------------------------------------------------------------
+# Non-secret configuration. Secrets (API keys, tokens) are set with
+#   npx wrangler secret put <NAME>
+# and are documented in .env.example + docs/DEPLOYMENT.md.
+# ---------------------------------------------------------------------------
 [vars]
 ALLOWED_ORIGINS = "http://localhost:8080"
-SESSION_TTL_DAYS = "30"
 APP_URL = "http://localhost:8080"
+API_URL = "http://localhost:8787/api"
+ENVIRONMENT = "development"
+SESSION_TTL_DAYS = "30"
+FROM_EMAIL = "no-reply@cloudgather.app"
+FROM_NAME = "CloudGather"
+SUPPORT_EMAIL = "support@cloudgather.app"
+BILLING_PORTAL_RETURN_PATH = "/billing"
+LOG_LEVEL = "info"
 
 [[d1_databases]]
 binding = "DB"
@@ -19,9 +32,38 @@ binding = "FILES"
 bucket_name = "cloudgather-files"
 preview_bucket_name = "cloudgather-files-preview"
 
+# Rate limiting + settings cache. The API falls back to D1 when KV is absent,
+# so this binding is optional — delete the block if you do not want KV.
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# Maintenance schedule:
+#   */5 * * * *  drain the email outbox + webhook retries, abort stale uploads
+#   0 3 * * *    full nightly sweep (trash purge, account purge, quotas, GC)
+#   0 8 * * 1    weekly digest email
+[triggers]
+crons = ["*/5 * * * *", "0 3 * * *", "0 8 * * 1"]
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# Preview / staging environment
+# ---------------------------------------------------------------------------
 [env.preview]
 name = "cloudgather-api-preview"
-vars = { ALLOWED_ORIGINS = "http://localhost:8080", SESSION_TTL_DAYS = "7" }
+
+[env.preview.vars]
+ALLOWED_ORIGINS = "http://localhost:8080"
+APP_URL = "http://localhost:8080"
+API_URL = "http://localhost:8787/api"
+ENVIRONMENT = "preview"
+SESSION_TTL_DAYS = "7"
+FROM_EMAIL = "no-reply@cloudgather.app"
+FROM_NAME = "CloudGather (preview)"
+SUPPORT_EMAIL = "support@cloudgather.app"
 
 [[env.preview.d1_databases]]
 binding = "DB"
@@ -32,3 +74,10 @@ migrations_dir = "worker/migrations"
 [[env.preview.r2_buckets]]
 binding = "FILES"
 bucket_name = "cloudgather-files-preview"
+
+[[env.preview.kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+[env.preview.triggers]
+crons = ["0 3 * * *"]

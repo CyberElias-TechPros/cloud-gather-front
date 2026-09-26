@@ -1,104 +1,215 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Activity,
+  CircleCheck,
+  CircleX,
+  Cloud,
+  FileText,
+  HardDrive,
+  Mail,
+  Newspaper,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Users, FileText, HardDrive, Activity, AlertCircle, Newspaper } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { getStats } from "@/services/admin";
+import { formatBytes, formatRelativeTime } from "@/lib/format";
+import { errorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-interface AdminStats {
-  userCount: number;
-  fileCount: number;
-  providerCount: number;
-  blogCount: number;
-  recentActivities: { id: string; action: string; resource_type: string; created_at: string }[];
-  degraded: boolean;
-}
-
-const AdminDashboard = () => {
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["admin-stats"],
-    queryFn: () => api<AdminStats>("/admin/stats"),
-    refetchInterval: 60 * 1000,
-  });
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
+const Stat: React.FC<{ label: string; value: string; icon: React.ComponentType<{ className?: string }>; hint?: string }> = ({
+  label,
+  value,
+  icon: Icon,
+  hint,
+}) => (
+  <Card>
+    <CardContent className="flex items-center gap-4 p-5">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="truncate text-xl font-semibold">{value}</p>
+        {hint ? <p className="truncate text-xs text-muted-foreground">{hint}</p> : null}
       </div>
+    </CardContent>
+  </Card>
+);
+
+/** Platform overview: counts, health, usage trends and recent admin activity. */
+const AdminDashboard: React.FC = () => {
+  const stats = useQuery({ queryKey: ["admin", "stats"], queryFn: getStats, refetchInterval: 60_000 });
+  const data = stats.data;
+
+  if (stats.isError) {
+    return (
+      <Alert variant="destructive">
+        <TriangleAlert className="h-4 w-4" />
+        <AlertTitle>Could not load platform statistics</AlertTitle>
+        <AlertDescription>{errorMessage(stats.error)}</AlertDescription>
+      </Alert>
     );
   }
 
-  const cards = [
-    { title: "Total users", value: stats?.userCount ?? 0, icon: Users, note: "Registered accounts" },
-    { title: "Files catalogued", value: stats?.fileCount ?? 0, icon: FileText, note: "Across all users" },
-    { title: "Provider connections", value: stats?.providerCount ?? 0, icon: HardDrive, note: "All statuses" },
-    { title: "Blog posts", value: stats?.blogCount ?? 0, icon: Newspaper, note: "Published" },
-  ];
+  const signups = data?.charts?.signups_by_day ?? [];
+  const uploads = data?.charts?.uploads_by_day ?? [];
+  const maxSignups = Math.max(...signups.map((item) => item.total), 1);
+  const maxUploads = Math.max(...uploads.map((item) => item.total), 1);
 
   return (
-    <div className="space-y-4">
-      {stats?.degraded && (
+    <div className="space-y-6">
+      {data?.degraded ? (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Some counters are unavailable</AlertTitle>
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>Platform is degraded</AlertTitle>
           <AlertDescription>
-            One or more admin read policies are missing on the server, so these numbers may be incomplete. See
-            the deployment guide — the consolidated migration adds the required policies.
+            {data.health?.database === false ? "Database checks are failing. " : ""}
+            {data.health?.storage === false ? "Object storage checks are failing. " : ""}
+            Check the status page and recent errors.
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-              <card.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums">{card.value.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">{card.note}</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[92px] w-full rounded-xl" />)
+        ) : (
+          <>
+            <Stat label="Users" value={String(data?.userCount ?? 0)} icon={Users} />
+            <Stat label="Files" value={String(data?.fileCount ?? 0)} icon={FileText} />
+            <Stat label="Provider connections" value={String(data?.providerCount ?? 0)} icon={Cloud} />
+            <Stat
+              label="Managed storage"
+              value={formatBytes(data?.metrics?.managed_storage_bytes ?? 0)}
+              icon={HardDrive}
+              hint={`${formatBytes(data?.metrics?.trash_bytes ?? 0)} in trash`}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Active sessions" value={String(data?.metrics?.active_sessions ?? 0)} icon={Activity} />
+        <Stat label="Queued emails" value={String(data?.metrics?.pending_emails ?? 0)} icon={Mail} />
+        <Stat label="Failed webhooks (24h)" value={String(data?.metrics?.failed_webhooks_24h ?? 0)} icon={TriangleAlert} />
+        <Stat label="Open tickets" value={String(data?.metrics?.open_tickets ?? 0)} icon={Newspaper} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Sign-ups (30 days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {signups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sign-ups recorded yet.</p>
+            ) : (
+              <div className="flex h-28 items-end gap-1">
+                {signups.map((day) => (
+                  <div
+                    key={day.day}
+                    className="flex-1 rounded-t bg-primary/70"
+                    style={{ height: `${Math.max((day.total / maxSignups) * 100, 3)}%` }}
+                    title={`${day.day}: ${day.total}`}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Uploads (30 days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {uploads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No uploads recorded yet.</p>
+            ) : (
+              <div className="flex h-28 items-end gap-1">
+                {uploads.map((day) => (
+                  <div
+                    key={day.day}
+                    className="flex-1 rounded-t bg-sky-500/70"
+                    style={{ height: `${Math.max((day.total / maxUploads) * 100, 3)}%` }}
+                    title={`${day.day}: ${day.total} files (${formatBytes(day.bytes)})`}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Plan mix</CardTitle>
+            <CardDescription>Accounts per subscription tier.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {(data?.metrics?.plans ?? []).map((row) => (
+                <li key={row.plan} className="flex items-center justify-between text-sm">
+                  <span className="capitalize">{row.plan}</span>
+                  <Badge variant="secondary">{row.total}</Badge>
+                </li>
+              ))}
+              {(data?.metrics?.plans ?? []).length === 0 ? (
+                <li className="text-sm text-muted-foreground">No data yet.</li>
+              ) : null}
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Health checks</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {[
+              { label: "Database (D1)", ok: data?.health?.database !== false },
+              { label: "Object storage (R2)", ok: data?.health?.storage !== false },
+            ].map((check) => (
+              <div key={check.label} className="flex items-center justify-between text-sm">
+                <span>{check.label}</span>
+                <span className={cn("flex items-center gap-1.5", check.ok ? "text-emerald-600" : "text-destructive")}>
+                  {check.ok ? <CircleCheck className="h-4 w-4" /> : <CircleX className="h-4 w-4" />}
+                  {check.ok ? "Operational" : "Failing"}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Recent activity</CardTitle>
-          <CardDescription>Latest recorded actions across the platform.</CardDescription>
         </CardHeader>
-        <CardContent>
-          {stats?.recentActivities.length ? (
-            <ul className="space-y-3">
-              {stats.recentActivities.map((activity) => (
-                <li key={activity.id} className="flex items-center gap-3 text-sm">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <Activity className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {activity.action} <span className="text-muted-foreground">· {activity.resource_type}</span>
-                    </p>
-                  </div>
-                  <time className="shrink-0 text-xs text-muted-foreground" dateTime={activity.created_at}>
-                    {formatDateTime(activity.created_at)}
-                  </time>
+        <CardContent className="p-0">
+          {stats.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-10 w-full" />)}
+            </div>
+          ) : (data?.recentActivities?.length ?? 0) === 0 ? (
+            <p className="px-6 pb-6 text-sm text-muted-foreground">Nothing logged yet.</p>
+          ) : (
+            <ul className="divide-y">
+              {data?.recentActivities.map((event) => (
+                <li key={event.id} className="flex items-center gap-3 px-6 py-2.5 text-sm">
+                  <Activity className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate capitalize">{event.action.replace(/[._]/g, " ")}</span>
+                  <span className="hidden truncate text-xs text-muted-foreground sm:block">{event.actor_email ?? "system"}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(event.created_at)}</span>
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No activity recorded yet. Actions appear here as users work with files.
-            </p>
           )}
         </CardContent>
       </Card>

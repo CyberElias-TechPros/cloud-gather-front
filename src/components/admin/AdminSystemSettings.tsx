@@ -1,228 +1,217 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, RotateCcw, Save, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { getSettings, saveSettings, toggleMaintenance, type AdminSetting } from "@/services/admin";
+import { errorMessage } from "@/lib/api";
 import { toast } from "sonner";
-import { Save, Loader2, ShieldAlert, RotateCcw } from "lucide-react";
 
-interface SystemSetting {
-  id: string;
-  setting_key: string;
-  setting_value: unknown;
-  description: string | null;
-}
+/** Groups a setting key such as `security.session_ttl_hours` by its prefix. */
+const groupOf = (key: string) => (key.includes(".") ? key.split(".")[0] : "general");
 
-type EditableValue = boolean | number | string;
+const labelOf = (key: string) =>
+  (key.includes(".") ? key.slice(key.indexOf(".") + 1) : key).replace(/[._]/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-/**
- * Typed presentation hints for the settings keys the console knows about.
- * Unknown keys still render (as generic JSON) so nothing is hidden or lost.
- */
-const settingMeta: Record<string, { label: string; kind: "boolean" | "number" | "string" | "json" }> = {
-  app_name: { label: "Application name", kind: "string" },
-  app_description: { label: "Application description", kind: "string" },
-  app_version: { label: "Application version", kind: "string" },
-  maintenance_mode: { label: "Maintenance mode", kind: "boolean" },
-  registration_enabled: { label: "Allow new registrations", kind: "boolean" },
-  email_verification_required: { label: "Require email verification", kind: "boolean" },
-  max_file_size_mb: { label: "Max upload size (MB)", kind: "number" },
-  max_storage_per_user_gb: { label: "Max storage per user (GB)", kind: "number" },
-  api_rate_limit_per_minute: { label: "API rate limit (requests/min)", kind: "number" },
-  session_timeout_minutes: { label: "Session timeout (minutes)", kind: "number" },
-  password_min_length: { label: "Minimum password length", kind: "number" },
-  analytics_enabled: { label: "Usage analytics", kind: "boolean" },
-  error_reporting_enabled: { label: "Error reporting", kind: "boolean" },
-  audit_logging_enabled: { label: "Detailed audit logging", kind: "boolean" },
-  virus_scanning_enabled: { label: "Virus scanning for uploads", kind: "boolean" },
-  allowed_file_types: { label: "Allowed file types (JSON)", kind: "json" },
-};
+type Draft = Record<string, unknown>;
 
-const AdminSystemSettings = () => {
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<Record<string, EditableValue>>({});
+const SettingField: React.FC<{
+  setting: AdminSetting;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}> = ({ setting, value, onChange }) => {
+  const id = `setting-${setting.setting_key}`;
 
-  const { data: settings, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["system-settings"],
-    queryFn: async (): Promise<SystemSetting[]> => (await api<{ settings: SystemSetting[] }>("/admin/settings")).settings,
-  });
-
-  useEffect(() => {
-    if (!settings) return;
-    const next: Record<string, EditableValue> = {};
-    for (const setting of settings) {
-      const value = setting.setting_value;
-      if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
-        next[setting.setting_key] = value;
-      } else {
-        next[setting.setting_key] = JSON.stringify(value);
-      }
-    }
-    setDraft(next);
-  }, [settings]);
-
-  const dirtyKeys = useMemo(() => {
-    if (!settings) return new Set<string>();
-    const initial: Record<string, EditableValue> = {};
-    for (const setting of settings) {
-      const value = setting.setting_value;
-      initial[setting.setting_key] =
-        typeof value === "boolean" || typeof value === "number" || typeof value === "string"
-          ? value
-          : JSON.stringify(value);
-    }
-    const dirty = new Set<string>();
-    for (const [key, value] of Object.entries(draft)) {
-      if (initial[key] !== value) dirty.add(key);
-    }
-    return dirty;
-  }, [settings, draft]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (changes: { key: string; value: EditableValue; description: string | null }[]) => {
-      const parsed = changes.map((change) => {
-        const kind = settingMeta[change.key]?.kind;
-        let value: unknown = change.value;
-        if (kind === "number") { value = Number(change.value); if (Number.isNaN(value)) throw new Error(`"${change.key}" must be a number.`); }
-        else if (kind === "json") { try { value = JSON.parse(String(change.value)); } catch { throw new Error(`"${change.key}" contains invalid JSON.`); } }
-        return { key: change.key, value };
-      });
-      await api("/admin/settings", { method: "PATCH", body: JSON.stringify({ changes: parsed }) });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
-      toast.success("Settings saved");
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const handleSave = () => {
-    if (!settings) return;
-    const changes = settings
-      .filter((s) => dirtyKeys.has(s.setting_key))
-      .map((s) => ({ key: s.setting_key, value: draft[s.setting_key], description: s.description }));
-    if (changes.length === 0) return;
-    saveMutation.mutate(changes);
-  };
-
-  if (isLoading) {
+  if (typeof value === "boolean") {
     return (
-      <div className="space-y-4">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-32 rounded-xl" />
-        ))}
+      <div className="flex items-start justify-between gap-4 py-3">
+        <div className="space-y-0.5">
+          <Label htmlFor={id}>{labelOf(setting.setting_key)}</Label>
+          {setting.description ? <p className="text-xs text-muted-foreground">{setting.description}</p> : null}
+        </div>
+        <Switch id={id} checked={value} onCheckedChange={onChange} />
       </div>
     );
   }
 
-  if (isError) {
+  if (typeof value === "number") {
+    return (
+      <div className="space-y-1.5 py-3">
+        <Label htmlFor={id}>{labelOf(setting.setting_key)}</Label>
+        <Input id={id} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+        {setting.description ? <p className="text-xs text-muted-foreground">{setting.description}</p> : null}
+      </div>
+    );
+  }
+
+  if (typeof value === "string") {
+    const multiline = value.length > 60 || value.includes("\n");
+    return (
+      <div className="space-y-1.5 py-3">
+        <Label htmlFor={id}>{labelOf(setting.setting_key)}</Label>
+        {multiline ? (
+          <Textarea id={id} rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+        ) : (
+          <Input id={id} value={value} onChange={(event) => onChange(event.target.value)} />
+        )}
+        {setting.description ? <p className="text-xs text-muted-foreground">{setting.description}</p> : null}
+      </div>
+    );
+  }
+
+  // Arrays and objects are edited as JSON.
+  return (
+    <div className="space-y-1.5 py-3">
+      <Label htmlFor={id}>{labelOf(setting.setting_key)}</Label>
+      <Textarea
+        id={id}
+        rows={3}
+        className="font-mono text-xs"
+        defaultValue={JSON.stringify(value, null, 2)}
+        onBlur={(event) => {
+          try {
+            onChange(JSON.parse(event.target.value));
+          } catch {
+            toast.error(`${setting.setting_key} must be valid JSON`);
+          }
+        }}
+      />
+      {setting.description ? <p className="text-xs text-muted-foreground">{setting.description}</p> : null}
+    </div>
+  );
+};
+
+/** Editor for the platform_settings table, grouped by key prefix. */
+const AdminSystemSettings: React.FC = () => {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = React.useState<Draft>({});
+
+  const settings = useQuery({ queryKey: ["admin", "settings"], queryFn: getSettings });
+
+  const changes = React.useMemo(
+    () =>
+      (settings.data ?? [])
+        .filter((setting) => setting.setting_key in draft && JSON.stringify(draft[setting.setting_key]) !== JSON.stringify(setting.setting_value))
+        .map((setting) => ({ key: setting.setting_key, value: draft[setting.setting_key] })),
+    [draft, settings.data],
+  );
+
+  const save = useMutation({
+    mutationFn: () => saveSettings(changes),
+    onSuccess: () => {
+      toast.success(`${changes.length} setting(s) saved`);
+      setDraft({});
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings"] });
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const maintenanceSetting = (settings.data ?? []).find((setting) => setting.setting_key.endsWith("maintenance_mode"));
+  const maintenanceOn = Boolean(maintenanceSetting?.setting_value);
+
+  const maintenance = useMutation({
+    mutationFn: (enabled: boolean) => toggleMaintenance(enabled),
+    onSuccess: (data) => {
+      toast.success(data.maintenance_mode ? "Maintenance mode enabled" : "Maintenance mode disabled");
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings"] });
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const groups = React.useMemo(() => {
+    const map = new Map<string, AdminSetting[]>();
+    for (const setting of settings.data ?? []) {
+      const group = groupOf(setting.setting_key);
+      map.set(group, [...(map.get(group) ?? []), setting]);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [settings.data]);
+
+  if (settings.isLoading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-40 w-full rounded-xl" />)}
+      </div>
+    );
+  }
+
+  if (settings.isError) {
     return (
       <Alert variant="destructive">
-        <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-        <AlertTitle>Couldn&apos;t load system settings</AlertTitle>
-        <AlertDescription>{(error as Error)?.message}</AlertDescription>
-        <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-          Try again
-        </Button>
+        <TriangleAlert className="h-4 w-4" />
+        <AlertTitle>Could not load settings</AlertTitle>
+        <AlertDescription>{errorMessage(settings.error)}</AlertDescription>
       </Alert>
     );
   }
 
-  const ordered = [...(settings ?? [])].sort((a, b) => {
-    const aKnown = a.setting_key in settingMeta ? 0 : 1;
-    const bKnown = b.setting_key in settingMeta ? 0 : 1;
-    return aKnown - bKnown || a.setting_key.localeCompare(b.setting_key);
-  });
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {dirtyKeys.size > 0 ? `${dirtyKeys.size} unsaved change${dirtyKeys.size === 1 ? "" : "s"}` : "All changes saved"}
-        </p>
-        <div className="flex gap-2">
-          {dirtyKeys.size > 0 && (
-            <Button
-              variant="ghost"
-              onClick={() => settings && setDraft(Object.fromEntries(settings.map((s) => [s.setting_key, (typeof s.setting_value === "object" && s.setting_value !== null ? JSON.stringify(s.setting_value) : s.setting_value) as EditableValue])))}
-            >
-              <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" /> Discard
-            </Button>
-          )}
-          <Button onClick={handleSave} disabled={dirtyKeys.size === 0 || saveMutation.isPending}>
-            {saveMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" aria-hidden="true" />
-            )}
-            Save changes
-          </Button>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Platform configuration</CardTitle>
+    <div className="space-y-5">
+      <Card className={maintenanceOn ? "border-destructive" : undefined}>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            Maintenance mode
+            {maintenanceOn ? <Badge variant="destructive">Active</Badge> : null}
+          </CardTitle>
           <CardDescription>
-            Global settings stored in the system_settings table. Values apply platform-wide after save.
+            Blocks non-admin API writes and shows a banner across the app. Use during migrations or incidents.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {ordered.map((setting) => {
-            const meta = settingMeta[setting.setting_key];
-            const label = meta?.label ?? setting.setting_key;
-            const description = setting.description ?? undefined;
-            const value = draft[setting.setting_key];
-
-            return (
-              <div key={setting.id} className="flex items-center justify-between gap-6">
-                <div className="min-w-0">
-                  <Label htmlFor={`setting-${setting.setting_key}`} className="font-medium">
-                    {label}
-                  </Label>
-                  {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-                  {!meta && <p className="mt-0.5 text-xs text-amber-600">Unrecognized key — edited as JSON.</p>}
-                </div>
-
-                <div className="shrink-0">
-                  {meta?.kind === "boolean" || (typeof setting.setting_value === "boolean" && !meta) ? (
-                    <Switch
-                      id={`setting-${setting.setting_key}`}
-                      checked={Boolean(value)}
-                      onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, [setting.setting_key]: checked }))}
-                    />
-                  ) : meta?.kind === "json" ? (
-                    <textarea
-                      id={`setting-${setting.setting_key}`}
-                      className="min-h-[72px] w-72 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      value={String(value ?? "")}
-                      onChange={(e) => setDraft((prev) => ({ ...prev, [setting.setting_key]: e.target.value }))}
-                    />
-                  ) : (
-                    <Input
-                      id={`setting-${setting.setting_key}`}
-                      type={meta?.kind === "number" ? "number" : "text"}
-                      className="w-56"
-                      value={String(value ?? "")}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          [setting.setting_key]: meta?.kind === "number" ? Number(e.target.value) : e.target.value,
-                        }))
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <CardContent>
+          <Button
+            variant={maintenanceOn ? "destructive" : "outline"}
+            disabled={maintenance.isPending}
+            onClick={() => maintenance.mutate(!maintenanceOn)}
+          >
+            {maintenance.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {maintenanceOn ? "Disable maintenance mode" : "Enable maintenance mode"}
+          </Button>
         </CardContent>
       </Card>
+
+      {groups.map(([group, items]) => (
+        <Card key={group}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-base capitalize">{group.replace(/_/g, " ")}</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y">
+            {items.map((setting) => (
+              <SettingField
+                key={setting.setting_key}
+                setting={setting}
+                value={setting.setting_key in draft ? draft[setting.setting_key] : setting.setting_value}
+                onChange={(value) => setDraft((current) => ({ ...current, [setting.setting_key]: value }))}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+
+      {changes.length > 0 ? (
+        <div className="sticky bottom-4 z-10 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur">
+          <p className="text-sm">
+            <strong>{changes.length}</strong> unsaved change{changes.length === 1 ? "" : "s"}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setDraft({})}>
+              <RotateCcw className="mr-2 h-4 w-4" /> Discard
+            </Button>
+            <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+              {save.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { Seo } from "./Seo";
 import { siteConfig } from "@/lib/site";
 import { faqJsonLd, blogPostingJsonLd, breadcrumbJsonLd } from "@/lib/seo";
