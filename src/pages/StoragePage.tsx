@@ -1,305 +1,263 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Seo } from "@/components/common/Seo";
+import React from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import { Cloud, HardDrive, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { Seo } from "@/components/common/Seo";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  HardDrive,
-  Folder,
-  Image as ImageIcon,
-  Video,
-  Music,
-  Archive,
-  FileText,
-  File as FileIcon,
-  AlertTriangle,
-  CloudUpload,
-  ArrowRight,
-} from "lucide-react";
-import { listAllFiles, listProviders, type StorageProvider } from "@/services/files";
-import type { FileItem } from "@/types/file";
-import { formatBytes, formatPercent } from "@/lib/format";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getFileStats } from "@/services/files";
+import { listConnections } from "@/services/providers";
+import { formatBytes } from "@/lib/format";
+import { categoryIcon, KIND_LABELS } from "@/lib/fileIcons";
 import { getProviderIcon, getProviderName } from "@/lib/providers";
+import { errorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-interface TypeBucket {
-  key: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  count: number;
-  size: number;
-}
+const BAR_COLOURS = [
+  "bg-primary",
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-violet-500",
+  "bg-rose-500",
+  "bg-teal-500",
+  "bg-orange-500",
+  "bg-slate-400",
+];
 
+/** Where every byte lives: plan usage, categories and per-provider totals. */
 const StoragePage: React.FC = () => {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [providers, setProviders] = useState<StorageProvider[]>([]);
+  const stats = useQuery({ queryKey: ["file-stats"], queryFn: getFileStats });
+  const providers = useQuery({ queryKey: ["providers"], queryFn: listConnections });
 
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [fileRows, providerRows] = await Promise.all([listAllFiles(), listProviders()]);
-        if (cancelled) return;
-        setFiles(fileRows);
-        setProviders(providerRows);
-      } catch (err) {
-        if (!cancelled) setError((err as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  const connected = providers.filter((p) => p.status === "connected");
-  const cloudFiles = files.filter((f) => !f.is_folder);
-  const usedBytes = cloudFiles.reduce((acc, f) => acc + (f.size || 0), 0);
-  const totalBytes = connected.reduce((acc, p) => acc + (p.total_space || 0), 0);
-  const providerUsed = connected.reduce((acc, p) => acc + (p.used_space || 0), 0);
-  const usagePercent = totalBytes > 0 ? Math.min(100, Math.round((usedBytes / totalBytes) * 100)) : 0;
-
-  const buckets = useMemo<TypeBucket[]>(() => {
-    const defs: (Omit<TypeBucket, "count" | "size"> & { match: (f: FileItem) => boolean })[] = [
-      { key: "image", label: "Images", icon: ImageIcon, match: (f) => (f.mime_type ?? "").startsWith("image/") },
-      { key: "video", label: "Videos", icon: Video, match: (f) => (f.mime_type ?? "").startsWith("video/") },
-      { key: "audio", label: "Audio", icon: Music, match: (f) => (f.mime_type ?? "").startsWith("audio/") },
-      {
-        key: "archive",
-        label: "Archives",
-        icon: Archive,
-        match: (f) => /zip|compressed|rar|7z|tar/.test(f.mime_type ?? ""),
-      },
-      {
-        key: "document",
-        label: "Documents",
-        icon: FileText,
-        match: (f) =>
-          (f.mime_type ?? "").startsWith("text/") ||
-          /pdf|word|document|sheet|presentation|msword|excel|powerpoint/.test(f.mime_type ?? ""),
-      },
-    ];
-    const result = defs.map((def) => {
-      const matched = cloudFiles.filter(def.match);
-      return {
-        ...def,
-        count: matched.length,
-        size: matched.reduce((acc, f) => acc + (f.size || 0), 0),
-      };
-    });
-    const others = cloudFiles.filter(
-      (f) => !defs.some((def) => def.match(f))
-    );
-    result.push({
-      key: "other",
-      label: "Other",
-      icon: FileIcon,
-      match: () => false,
-      count: others.length,
-      size: others.reduce((acc, f) => acc + (f.size || 0), 0),
-    });
-    return result.filter((b) => b.count > 0);
-  }, [cloudFiles]);
-
-  const totalFolders = files.filter((f) => f.is_folder).length;
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-36 rounded-xl" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-56 rounded-xl" />
-          <Skeleton className="h-56 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="border-destructive/30">
-        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-          <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
-          <p className="font-medium">Couldn&apos;t load storage information</p>
-          <p className="max-w-md text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" onClick={() => window.location.reload()}>Reload</Button>
-        </CardContent>
-      </Card>
-    );
-  }
+  const usage = stats.data?.usage;
+  const limits = stats.data?.limits;
+  const percent = stats.data?.storage_percent ?? 0;
+  const categories = (stats.data?.by_category ?? []).slice().sort((a, b) => b.bytes - a.bytes);
+  const totalCategorised = categories.reduce((sum, item) => sum + item.bytes, 0) || 1;
 
   return (
     <div className="space-y-6">
-      <Seo title="Storage" description="CloudGather storage" path="/storage" noIndex />
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Storage</h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Usage across your CloudGather uploads and connected providers.
-        </p>
-      </div>
+      <Seo title="Storage" description="Storage usage across CloudGather and your connected drives." path="/storage" noIndex />
+      <PageHeader
+        title="Storage"
+        icon={HardDrive}
+        description="Understand what's using your space and where it lives."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link to="/trash">
+                <Trash2 className="mr-2 h-4 w-4" /> Trash
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to="/billing">
+                <Sparkles className="mr-2 h-4 w-4" /> Upgrade
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Summary */}
+      {stats.isError ? (
+        <Alert variant="destructive">
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>Could not load storage information</AlertTitle>
+          <AlertDescription>{errorMessage(stats.error)}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {/* Plan usage */}
       <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-3xl font-bold">{formatBytes(usedBytes)}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {totalBytes > 0
-                  ? `of ${formatBytes(totalBytes)} pooled quota (${formatPercent(usedBytes, totalBytes)})`
-                  : `across ${cloudFiles.length.toLocaleString()} files`}
-              </p>
+              <CardTitle>
+                {stats.isLoading ? <Skeleton className="h-6 w-40" /> : `${formatBytes(usage?.storageBytes ?? 0)} used`}
+              </CardTitle>
+              <CardDescription>
+                of {formatBytes(limits?.storageBytes ?? 0)} on the {stats.data?.plan?.name ?? "Free"} plan
+              </CardDescription>
             </div>
-            <div className="flex gap-6 text-right text-sm">
-              <div>
-                <p className="font-semibold">{cloudFiles.length.toLocaleString()}</p>
-                <p className="text-muted-foreground">files</p>
-              </div>
-              <div>
-                <p className="font-semibold">{totalFolders.toLocaleString()}</p>
-                <p className="text-muted-foreground">folders</p>
-              </div>
-              <div>
-                <p className="font-semibold">{connected.length}</p>
-                <p className="text-muted-foreground">providers</p>
-              </div>
-            </div>
+            <Badge variant={percent >= 90 ? "destructive" : percent >= 75 ? "secondary" : "outline"}>
+              {percent.toFixed(1)}% full
+            </Badge>
           </div>
-          <div
-            className="mt-5 h-3 w-full overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuenow={usagePercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Storage used"
-          >
-            <div
-              className={`h-full rounded-full transition-all ${usagePercent > 90 ? "bg-destructive" : "bg-gradient-to-r from-primary to-accent"}`}
-              style={{ width: `${Math.max(usagePercent, usedBytes > 0 ? 2 : 0)}%` }}
-            />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Progress value={Math.min(percent, 100)} className="h-2.5" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: "Files", value: String(usage?.fileCount ?? 0) },
+              { label: "Folders", value: String(usage?.folderCount ?? 0) },
+              { label: "In trash", value: formatBytes(usage?.trashBytes ?? 0) },
+              { label: "Connected drives", value: String(usage?.providerCount ?? 0) },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">{item.label}</p>
+                <p className="text-lg font-semibold">{item.value}</p>
+              </div>
+            ))}
           </div>
-          {usagePercent > 90 && (
-            <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
-              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-              You&apos;re above 90% of your pooled quota — consider cleaning up or adding another provider.
-            </p>
-          )}
-          {connected.length === 0 && (
-            <div className="mt-4 flex flex-col items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-muted-foreground">
-                No providers connected yet — connect one to pool its quota and browse its files.
-              </p>
-              <Button size="sm" asChild>
-                <Link to="/providers">
-                  <CloudUpload className="mr-2 h-4 w-4" aria-hidden="true" /> Connect provider
-                </Link>
-              </Button>
-            </div>
-          )}
+          {percent >= 80 ? (
+            <Alert>
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Running low on space</AlertTitle>
+              <AlertDescription>
+                Empty the <Link className="underline" to="/trash">trash</Link> or{" "}
+                <Link className="underline" to="/billing">move to a larger plan</Link>.
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Per-provider */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* By category */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <HardDrive className="h-4 w-4 text-primary" aria-hidden="true" /> By provider
-            </CardTitle>
+          <CardHeader>
+            <CardTitle>By file type</CardTitle>
+            <CardDescription>What is taking up the most room.</CardDescription>
           </CardHeader>
-          <CardContent>
-            {connected.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Connect a provider to see its quota here.</p>
+          <CardContent className="space-y-4">
+            {stats.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : categories.length === 0 ? (
+              <EmptyState className="border-0 py-8" icon={HardDrive} title="Nothing stored yet" />
             ) : (
-              <ul className="space-y-4">
-                {connected.map((provider) => {
-                  const Icon = getProviderIcon(provider.provider_name);
-                  const pTotal = provider.total_space ?? 0;
-                  const pUsed = provider.used_space ?? 0;
-                  const pct = pTotal > 0 ? Math.round((pUsed / pTotal) * 100) : 0;
+              <>
+                <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                  {categories.map((item, index) => (
+                    <span
+                      key={item.category}
+                      className={cn("h-full", BAR_COLOURS[index % BAR_COLOURS.length])}
+                      style={{ width: `${(item.bytes / totalCategorised) * 100}%` }}
+                      title={`${item.category}: ${formatBytes(item.bytes)}`}
+                    />
+                  ))}
+                </div>
+                <ul className="space-y-2">
+                  {categories.map((item, index) => {
+                    const Icon = categoryIcon(item.category);
+                    return (
+                      <li key={item.category} className="flex items-center gap-3 text-sm">
+                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", BAR_COLOURS[index % BAR_COLOURS.length])} />
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate">{KIND_LABELS[item.category] ?? item.category}</span>
+                        <span className="text-muted-foreground">{item.files} files</span>
+                        <span className="w-20 text-right font-medium">{formatBytes(item.bytes)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* By provider */}
+        <Card>
+          <CardHeader>
+            <CardTitle>By location</CardTitle>
+            <CardDescription>CloudGather storage plus every connected drive.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stats.isLoading || providers.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <ul className="space-y-3">
+                {(stats.data?.by_provider ?? []).map((row) => {
+                  const Icon = row.provider_name ? getProviderIcon(row.provider_name) : HardDrive;
                   return (
-                    <li key={provider.id}>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2 font-medium">
-                          <Icon className={`h-4 w-4 ${"text-muted-foreground"}`} aria-hidden="true" />
-                          {getProviderName(provider.provider_name)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {pTotal > 0 ? `${formatBytes(pUsed)} / ${formatBytes(pTotal)}` : formatBytes(pUsed)}
-                        </span>
+                    <li key={row.provider_id ?? "managed"} className="flex items-center gap-3">
+                      <Icon className="h-6 w-6 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {row.provider_name ? getProviderName(row.provider_name) : "CloudGather storage"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{row.items} items</p>
                       </div>
-                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full rounded-full ${pct > 90 ? "bg-destructive" : "bg-primary/70"}`}
-                          style={{ width: `${Math.max(Math.min(pct, 100), 1)}%` }}
-                        />
-                      </div>
+                      <span className="text-sm font-medium">{formatBytes(row.bytes)}</span>
                     </li>
                   );
                 })}
-                {providerUsed > usedBytes && (
-                  <li className="text-xs text-muted-foreground">
-                    Provider quotas include files stored outside CloudGather, so provider usage can exceed the
-                    CloudGather total.
+                {(providers.data ?? []).length === 0 ? (
+                  <li>
+                    <EmptyState
+                      className="border-0 py-6"
+                      icon={Cloud}
+                      title="No drives connected"
+                      description="Connect Google Drive, Dropbox, OneDrive, S3 and more."
+                      action={
+                        <Button size="sm" asChild>
+                          <Link to="/providers">Connect a drive</Link>
+                        </Button>
+                      }
+                    />
                   </li>
+                ) : (
+                  providers.data?.map((provider) => {
+                    const used = provider.used_space ?? 0;
+                    const total = provider.total_space ?? 0;
+                    const Icon = getProviderIcon(provider.provider_name);
+                    return (
+                      <li key={provider.id} className="space-y-1 rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-5 w-5 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                            {provider.display_name || getProviderName(provider.provider_name)}
+                          </span>
+                          <Badge variant={provider.status === "error" ? "destructive" : "secondary"}>{provider.status}</Badge>
+                        </div>
+                        {total > 0 ? (
+                          <>
+                            <Progress value={Math.min((used / total) * 100, 100)} className="h-1.5" />
+                            <p className="text-xs text-muted-foreground">
+                              {formatBytes(used)} of {formatBytes(total)} on the provider
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">{provider.file_count} files indexed</p>
+                        )}
+                      </li>
+                    );
+                  })
                 )}
               </ul>
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* By type */}
+      {/* Recent uploads trend */}
+      {stats.data?.recent_uploads?.length ? (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Folder className="h-4 w-4 text-primary" aria-hidden="true" /> By file type
-            </CardTitle>
+          <CardHeader>
+            <CardTitle>Uploads over the last 30 days</CardTitle>
           </CardHeader>
           <CardContent>
-            {cloudFiles.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Upload files to see the breakdown here.</p>
-            ) : (
-              <ul className="space-y-3">
-                {buckets.map((bucket) => (
-                  <li key={bucket.key} className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <bucket.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium">{bucket.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {bucket.count} file{bucket.count === 1 ? "" : "s"} · {formatBytes(bucket.size)}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-accent/70"
-                          style={{ width: `${Math.max((bucket.size / Math.max(usedBytes, 1)) * 100, 1)}%` }}
-                        />
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button variant="ghost" size="sm" className="mt-4" asChild>
-              <Link to="/files">
-                Manage files <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
-              </Link>
-            </Button>
+            <div className="flex h-32 items-end gap-1">
+              {stats.data.recent_uploads.map((day) => {
+                const max = Math.max(...stats.data!.recent_uploads!.map((item) => item.bytes), 1);
+                return (
+                  <div
+                    key={day.day}
+                    className="flex-1 rounded-t bg-primary/70"
+                    style={{ height: `${Math.max((day.bytes / max) * 100, 2)}%` }}
+                    title={`${day.day}: ${formatBytes(day.bytes)} (${day.files} files)`}
+                  />
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
-      </div>
+      ) : null}
     </div>
   );
 };

@@ -1,47 +1,65 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
 import { Seo } from "@/components/common/Seo";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminDashboard from "@/components/admin/AdminDashboard";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
 import AdminSystemSettings from "@/components/admin/AdminSystemSettings";
+import AdminContactInbox from "@/components/admin/AdminContactInbox";
+import AdminBlogManager from "@/components/admin/AdminBlogManager";
+import AdminAnnouncements from "@/components/admin/AdminAnnouncements";
+import AdminAuditLog from "@/components/admin/AdminAuditLog";
+import AdminOperations from "@/components/admin/AdminOperations";
+
+const TABS = [
+  { value: "dashboard", label: "Overview", element: <AdminDashboard /> },
+  { value: "users", label: "Users", element: <AdminUserManagement /> },
+  { value: "inbox", label: "Inbox", element: <AdminContactInbox /> },
+  { value: "blog", label: "Blog", element: <AdminBlogManager /> },
+  { value: "announcements", label: "Announcements", element: <AdminAnnouncements /> },
+  { value: "operations", label: "Operations", element: <AdminOperations /> },
+  { value: "audit", label: "Audit log", element: <AdminAuditLog /> },
+  { value: "settings", label: "Settings", element: <AdminSystemSettings /> },
+];
 
 /**
- * Admin console. Route access is already gated by AdminRoute (is_admin_user
- * RPC); all data below is additionally protected by server-side RLS policies,
- * so the UI is convenience, not the security boundary.
+ * Admin console. Route access is gated by AdminRoute on the client and by the
+ * `requireAdmin` middleware on every /api/admin/* route — the UI is
+ * convenience, the worker is the security boundary.
  */
-const AdminPage = () => {
+const AdminPage: React.FC = () => {
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((entry) => entry.value === params.get("tab")) ? params.get("tab")! : "dashboard";
+
   return (
     <div className="space-y-6">
       <Seo title="Admin console" description="CloudGather admin" path="/admin" noIndex />
-      <div>
-        <header>
-          <h1 className="text-2xl font-bold tracking-tight">Admin console</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Platform overview, user management and system configuration.
-          </p>
-        </header>
+      <PageHeader
+        title="Admin console"
+        description="Platform health, user management, content and system configuration."
+      />
 
-        <Tabs defaultValue="dashboard">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setParams(value === "dashboard" ? {} : { tab: value }, { replace: true })}
+      >
+        <div className="overflow-x-auto pb-1">
           <TabsList>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="settings">System settings</TabsTrigger>
+            {TABS.map((entry) => (
+              <TabsTrigger key={entry.value} value={entry.value}>
+                {entry.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
+        </div>
 
-          <TabsContent value="dashboard" className="mt-4">
-            <AdminDashboard />
+        {TABS.map((entry) => (
+          <TabsContent key={entry.value} value={entry.value} className="mt-4">
+            {entry.element}
           </TabsContent>
-
-          <TabsContent value="users" className="mt-4">
-            <AdminUserManagement />
-          </TabsContent>
-
-          <TabsContent value="settings" className="mt-4">
-            <AdminSystemSettings />
-          </TabsContent>
-        </Tabs>
-      </div>
+        ))}
+      </Tabs>
     </div>
   );
 };

@@ -1,5 +1,17 @@
 import React from "react";
-import { GoogleDriveIcon, DropboxIcon, OneDriveIcon, BoxIcon } from "@/components/icons/provider-icons";
+import {
+  GoogleDriveIcon,
+  DropboxIcon,
+  OneDriveIcon,
+  BoxIcon,
+  AmazonS3Icon,
+  BackblazeIcon,
+  MegaIcon,
+  PCloudIcon,
+  YandexDiskIcon,
+  IcedriveIcon,
+  SyncIcon,
+} from "@/components/icons/provider-icons";
 
 export type ProviderKind = "oauth" | "credentials";
 
@@ -62,7 +74,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Amazon S3",
     description: "Any S3 bucket via access keys. Great for archives and backups.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: AmazonS3Icon,
     color: "text-[#FF9900]",
     docsUrl: "https://aws.amazon.com/s3/",
     credentialFields: [
@@ -77,7 +89,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Backblaze B2",
     description: "Backblaze B2 cloud storage buckets.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: BackblazeIcon,
     color: "text-[#E21E29]",
     docsUrl: "https://www.backblaze.com/b2/docs/",
     credentialFields: [
@@ -87,11 +99,27 @@ export const PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "s3-compatible",
+    name: "S3-compatible storage",
+    description: "Wasabi, MinIO, Cloudflare R2, DigitalOcean Spaces and friends.",
+    kind: "credentials",
+    icon: AmazonS3Icon,
+    color: "text-[#3B82F6]",
+    docsUrl: "https://docs.min.io",
+    credentialFields: [
+      { key: "accessKeyId", label: "Access key ID", type: "text", required: true },
+      { key: "secretAccessKey", label: "Secret access key", type: "password", required: true },
+      { key: "bucket", label: "Bucket", type: "text", required: true },
+      { key: "region", label: "Region", type: "text", required: true, helpText: "e.g. us-east-1" },
+      { key: "endpoint", label: "Endpoint", type: "text", required: true, helpText: "https://s3.wasabisys.com" },
+    ],
+  },
+  {
     id: "pcloud",
     name: "pCloud",
     description: "Your pCloud drive, including crypto folders where permitted.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: PCloudIcon,
     color: "text-[#17A814]",
     docsUrl: "https://docs.pcloud.com",
     credentialFields: [
@@ -104,7 +132,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Yandex Disk",
     description: "Files stored in Yandex Disk.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: YandexDiskIcon,
     color: "text-[#CC0000]",
     docsUrl: "https://yandex.com/dev/disk",
     credentialFields: [
@@ -116,7 +144,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "MEGA",
     description: "MEGA cloud drive (end-to-end encrypted providers have limited browsing support).",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: MegaIcon,
     color: "text-[#D9272E]",
     docsUrl: "https://mega.nz",
     credentialFields: [
@@ -129,7 +157,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Icedrive",
     description: "Icedrive cloud storage.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: IcedriveIcon,
     color: "text-[#2D9CDB]",
     docsUrl: "https://icedrive.net",
     credentialFields: [
@@ -142,7 +170,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Sync.com",
     description: "Sync.com encrypted storage.",
     kind: "credentials",
-    icon: BoxIcon,
+    icon: SyncIcon,
     color: "text-[#00A3E0]",
     docsUrl: "https://www.sync.com",
     credentialFields: [

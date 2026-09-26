@@ -1,5 +1,19 @@
 /** Formatting helpers shared across the app. */
 
+/**
+ * Parses the timestamp formats the API returns. D1 columns that default to
+ * CURRENT_TIMESTAMP come back as "YYYY-MM-DD HH:MM:SS" (UTC, no zone marker),
+ * while values written by the Worker are full ISO-8601 strings. Treat the
+ * former as UTC so the browser does not shift them by the local offset.
+ */
+export function parseDate(input: string | Date | null | undefined): Date | null {
+  if (!input) return null;
+  if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input;
+  const value = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(input) ? `${input.replace(" ", "T")}Z` : input;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** Format a byte count as a human-readable string (KB, MB, GB…). */
 export function formatBytes(bytes: number | null | undefined, decimals = 1): string {
   if (bytes === null || bytes === undefined || Number.isNaN(bytes)) return "—";
@@ -19,9 +33,8 @@ export function formatPercent(used: number, total: number): string {
 
 /** ISO date or Date → "Mar 8, 2026". */
 export function formatDate(input: string | Date | null | undefined): string {
-  if (!input) return "—";
-  const date = typeof input === "string" ? new Date(input) : input;
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = parseDate(input);
+  if (!date) return "—";
   return date.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -31,9 +44,8 @@ export function formatDate(input: string | Date | null | undefined): string {
 
 /** ISO date → "Mar 8, 2026, 4:05 PM". */
 export function formatDateTime(input: string | Date | null | undefined): string {
-  if (!input) return "—";
-  const date = typeof input === "string" ? new Date(input) : input;
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = parseDate(input);
+  if (!date) return "—";
   return date.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
@@ -45,9 +57,8 @@ export function formatDateTime(input: string | Date | null | undefined): string 
 
 /** Relative time ("3 min ago", "2 days ago"). Falls back to a date beyond a month. */
 export function formatRelativeTime(input: string | Date | null | undefined): string {
-  if (!input) return "—";
-  const date = typeof input === "string" ? new Date(input) : input;
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = parseDate(input);
+  if (!date) return "—";
 
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
   if (seconds < 60) return "just now";

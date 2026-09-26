@@ -93,6 +93,7 @@ systemRoutes.get("/api/config", async (ctx) => {
         : [],
     },
     capabilities: capabilities(ctx.env),
+    turnstile_site_key: ctx.env.TURNSTILE_SECRET_KEY ? ctx.env.TURNSTILE_SITE_KEY || null : null,
     social_providers: socialProviderIds.filter((provider) => capabilities(ctx.env).social[provider as "google" | "github" | "microsoft"]),
     storage_providers: catalogue(ctx.env),
     roadmap_providers: ROADMAP_PROVIDERS,

@@ -1,13 +1,34 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Cloud,
+  CloudOff,
+  ExternalLink,
+  FolderDown,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  Plug,
+  RefreshCw,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react";
 import { Seo } from "@/components/common/Seo";
-import { useAuth } from "@/contexts/AuthContext";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -17,378 +38,524 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
-import {
-  Search,
-  MoreVertical,
-  Unplug,
-  Loader2,
-  Cloud,
-  ArrowDownUp,
-  CheckCircle2,
-  AlertCircle,
-  ExternalLink,
-} from "lucide-react";
-import {
-  listProviders,
-  disconnectProvider,
-  updateProviderOrder,
-  type StorageProvider,
-} from "@/services/files";
-import { PROVIDERS, getProviderMeta, getProviderName } from "@/lib/providers";
-import { formatBytes } from "@/lib/format";
-import { api } from "@/lib/api";
+  browseProvider,
+  connectWithCredentials,
+  disconnect,
+  getCatalogue,
+  importFromProvider,
+  listConnections,
+  reorderConnections,
+  startOAuth,
+  syncProvider,
+  updateConnection,
+} from "@/services/providers";
+import { formatBytes, formatRelativeTime } from "@/lib/format";
+import { getProviderIcon, getProviderName } from "@/lib/providers";
+import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import type { ConnectedProvider, ProviderCatalogueEntry } from "@/types/api";
 
+/** Connect, sync and import from external storage providers. */
 const ProvidersPage: React.FC = () => {
-  const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [providers, setProviders] = useState<StorageProvider[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [connecting, setConnecting] = useState<string | null>(null);
-  const [credentialsTarget, setCredentialsTarget] = useState<string | null>(null);
-  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
-  const [connectingBusy, setConnectingBusy] = useState(false);
-  const [disconnectTarget, setDisconnectTarget] = useState<StorageProvider | null>(null);
-  const [disconnectBusy, setDisconnectBusy] = useState(false);
+  const queryClient = useQueryClient();
+  const [params, setParams] = useSearchParams();
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setProviders(await listProviders());
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+  const [credentialTarget, setCredentialTarget] = React.useState<ProviderCatalogueEntry | null>(null);
+  const [credentials, setCredentials] = React.useState<Record<string, string>>({});
+  const [displayName, setDisplayName] = React.useState("");
+  const [disconnectTarget, setDisconnectTarget] = React.useState<ConnectedProvider | null>(null);
+  const [renameTarget, setRenameTarget] = React.useState<ConnectedProvider | null>(null);
+  const [renameValue, setRenameValue] = React.useState("");
+  const [browseTarget, setBrowseTarget] = React.useState<ConnectedProvider | null>(null);
+  const [browsePath, setBrowsePath] = React.useState<{ id: string | null; name: string }[]>([]);
+  const [connecting, setConnecting] = React.useState<string | null>(null);
+
+  const catalogue = useQuery({ queryKey: ["provider-catalogue"], queryFn: getCatalogue });
+  const connections = useQuery({ queryKey: ["providers"], queryFn: listConnections });
+
+  const currentFolder = browsePath.length ? browsePath[browsePath.length - 1].id : null;
+  const browse = useQuery({
+    queryKey: ["provider-browse", browseTarget?.id, currentFolder],
+    queryFn: () => browseProvider(browseTarget!.id, currentFolder),
+    enabled: Boolean(browseTarget),
+  });
+
+  /* OAuth round-trip feedback (?connected=google-drive or ?error=…) */
+  React.useEffect(() => {
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (connected) {
+      toast.success(`${getProviderName(connected)} connected`);
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
     }
-  };
-
-  useEffect(() => {
-    if (user) void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  // Surface the result of an OAuth callback redirect (?connect=success|error).
-  useEffect(() => {
-    const connect = searchParams.get("connect");
-    if (!connect) return;
-    if (connect === "success") toast.success("Provider connected");
-    else toast.error("Provider connection didn't complete. Please try again.");
-    setSearchParams({}, { replace: true });
+    if (error) toast.error(decodeURIComponent(error));
+    if (connected || error) {
+      const next = new URLSearchParams(params);
+      next.delete("connected");
+      next.delete("error");
+      setParams(next, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const connectedByProvider = useMemo(() => {
-    const map = new Map<string, StorageProvider>();
-    providers.filter((p) => p.status === "connected").forEach((p) => map.set(p.provider_name, p));
-    return map;
-  }, [providers]);
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["providers"] });
+    queryClient.invalidateQueries({ queryKey: ["files"] });
+    queryClient.invalidateQueries({ queryKey: ["file-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  };
 
-  const catalogue = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return PROVIDERS.filter(
-      (p) => !q || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
-
-  const handleConnectOAuth = async (providerId: string) => {
-    // Real OAuth requires provider apps + edge function configuration. Until the
-    // operator configures credentials, surface an honest, actionable state.
-    setConnectingBusy(true);
+  const beginOAuth = async (provider: ProviderCatalogueEntry) => {
+    setConnecting(provider.id);
     try {
-      const data = await api<{ url: string }>(`/providers/${providerId}/oauth?redirect=${encodeURIComponent(`${window.location.origin}/providers`)}`);
-      if (!data?.url) {
-        toast.error(
-          `${getProviderName(providerId)} sign-in isn't configured yet on this deployment. An operator needs to add the ${getProviderName(providerId)} OAuth credentials (see the deployment guide).`,
-          { duration: 7000 }
-        );
-        return;
-      }
-      window.location.href = data.url as string;
-    } catch {
-      toast.error(
-        `${getProviderName(providerId)} sign-in isn't configured yet on this deployment. See the deployment guide for setup steps.`,
-        { duration: 7000 }
-      );
-    } finally {
-      setConnectingBusy(false);
+      const { url } = await startOAuth(provider.id);
+      window.location.assign(url);
+    } catch (error) {
+      toast.error(errorMessage(error));
       setConnecting(null);
     }
   };
 
-  const handleConnectCredentials = async () => {
-    if (!credentialsTarget) return;
-    const meta = getProviderMeta(credentialsTarget);
-    if (!meta?.credentialFields) return;
-    for (const field of meta.credentialFields) {
-      if (field.required && !credentialValues[field.key]?.trim()) {
-        toast.error(`${field.label} is required.`);
-        return;
-      }
-    }
-    setConnectingBusy(true);
-    try {
-      // Credentials-based providers are stored through the sync-auth edge
-      // function, which validates and normalizes them server-side.
-      await api("/providers/connect", {
-        method: "POST",
-        body: JSON.stringify({ provider: credentialsTarget, credentials: credentialValues }),
-      });
-      toast.success(`${meta.name} connected`);
-      setCredentialsTarget(null);
-      setCredentialValues({});
-      await load();
-    } catch (err) {
-      toast.error((err as Error).message || `Could not connect ${meta?.name}.`);
-    } finally {
-      setConnectingBusy(false);
-    }
-  };
+  const connect = useMutation({
+    mutationFn: () => connectWithCredentials(credentialTarget!.id, credentials, displayName.trim() || undefined),
+    onSuccess: (data) => {
+      toast.success(`${getProviderName(data.provider.provider_name)} connected`);
+      setCredentialTarget(null);
+      setCredentials({});
+      setDisplayName("");
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
-  const handleDisconnect = async () => {
-    if (!disconnectTarget || disconnectBusy) return;
-    setDisconnectBusy(true);
-    try {
-      await disconnectProvider(disconnectTarget.id);
-      toast.success(`${getProviderName(disconnectTarget.provider_name)} disconnected`);
+  const sync = useMutation({
+    mutationFn: (id: string) => syncProvider(id),
+    onSuccess: (data) => {
+      toast.success(`Indexed ${data.indexed} item${data.indexed === 1 ? "" : "s"}`);
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const rename = useMutation({
+    mutationFn: () => updateConnection(renameTarget!.id, { display_name: renameValue.trim() }),
+    onSuccess: () => {
+      toast.success("Name updated");
+      setRenameTarget(null);
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => disconnect(id),
+    onSuccess: () => {
+      toast.success("Drive disconnected");
       setDisconnectTarget(null);
-      await load();
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setDisconnectBusy(false);
-    }
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const reorder = useMutation({
+    mutationFn: (ids: string[]) => reorderConnections(ids),
+    onSuccess: invalidate,
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const importFile = useMutation({
+    mutationFn: ({ entry }: { entry: { id: string; name: string } }) =>
+      importFromProvider(browseTarget!.id, { file_id: entry.id, name: entry.name }),
+    onSuccess: (data) => {
+      toast.success(`${data.file.filename} imported into your library`);
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const move = (index: number, delta: number) => {
+    const list = [...(connections.data ?? [])];
+    const target = index + delta;
+    if (target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+    reorder.mutate(list.map((item) => item.id));
   };
 
-  const moveProvider = async (provider: StorageProvider, direction: -1 | 1) => {
-    const ids = providers.map((p) => p.id);
-    const index = ids.indexOf(provider.id);
-    const target = index + direction;
-    if (target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    setProviders((prev) => {
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-    try {
-      await updateProviderOrder(ids);
-    } catch {
-      toast.error("Could not save the new order.");
-      await load();
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-56" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-36 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const connected = connections.data ?? [];
+  const connectedIds = new Set(connected.map((item) => item.provider_name));
+  const available = catalogue.data?.providers ?? [];
+  const roadmap = catalogue.data?.roadmap ?? [];
 
   return (
     <div className="space-y-6">
-      <Seo title="Providers" description="CloudGather providers" path="/providers" noIndex />
-      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Connect the storage accounts you already use. Tokens are stored server-side and can be revoked anytime.
-          </p>
-        </div>
-        <div className="relative lg:w-64">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            type="search"
-            placeholder="Search providers…"
-            className="pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search providers"
+      <Seo title="Connected drives" description="Connect Google Drive, Dropbox, OneDrive, S3 and more." path="/providers" noIndex />
+      <PageHeader
+        title="Connected drives"
+        icon={Cloud}
+        description="Bring every cloud you use into one searchable library."
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/files">Go to files</Link>
+          </Button>
+        }
+      />
+
+      {/* Connected */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Your drives</h2>
+        {connections.isLoading ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-32 w-full rounded-xl" />)}
+          </div>
+        ) : connected.length === 0 ? (
+          <EmptyState
+            icon={CloudOff}
+            title="No drives connected yet"
+            description="Connect your first cloud account below — we only ever request the access we need."
           />
-        </div>
-      </div>
-
-      {error && (
-        <Card className="border-destructive/30">
-          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-            <AlertCircle className="h-7 w-7 text-destructive" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{error}</p>
-            <Button variant="outline" onClick={() => void load()}>Try again</Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!error && (
-        <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {catalogue.map((provider) => {
-            const connected = connectedByProvider.get(provider.id);
-            return (
-              <li key={provider.id}>
-                <Card className={cn("card-hover h-full", connected && "border-primary/40")}>
-                  <CardContent className="flex h-full flex-col gap-3 p-5">
-                    <div className="flex items-start justify-between">
-                      <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted">
-                        <provider.icon className={cn("h-6 w-6", provider.color)} aria-hidden="true" />
-                      </span>
-                      {connected ? (
-                        <Badge variant="secondary" className="gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-success" aria-hidden="true" /> Connected
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">Not connected</Badge>
-                      )}
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {connected.map((provider, index) => {
+              const Icon = getProviderIcon(provider.provider_name);
+              const used = provider.used_space ?? 0;
+              const total = provider.total_space ?? 0;
+              return (
+                <Card key={provider.id} className={cn(provider.status === "error" && "border-destructive/50")}>
+                  <CardContent className="space-y-3 p-5">
+                    <div className="flex items-start gap-3">
+                      <Icon className="h-8 w-8 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">
+                          {provider.display_name || getProviderName(provider.provider_name)}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {provider.provider_user_email || getProviderName(provider.provider_name)}
+                        </p>
+                      </div>
+                      <Badge variant={provider.status === "error" ? "destructive" : "secondary"}>{provider.status}</Badge>
                     </div>
 
-                    <div>
-                      <h2 className="font-semibold">{provider.name}</h2>
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                        {provider.description}
-                      </p>
+                    {total > 0 ? (
+                      <div className="space-y-1">
+                        <Progress value={Math.min((used / total) * 100, 100)} className="h-1.5" />
+                        <p className="text-xs text-muted-foreground">
+                          {formatBytes(used)} of {formatBytes(total)} used
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <p className="text-xs text-muted-foreground">
+                      {provider.file_count} files indexed
+                      {provider.last_sync_at ? ` · synced ${formatRelativeTime(provider.last_sync_at)}` : " · never synced"}
+                    </p>
+
+                    {provider.last_error ? (
+                      <Alert variant="destructive" className="py-2">
+                        <TriangleAlert className="h-4 w-4" />
+                        <AlertDescription className="text-xs">{provider.last_error}</AlertDescription>
+                      </Alert>
+                    ) : null}
+
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="sm" variant="outline" onClick={() => sync.mutate(provider.id)} disabled={sync.isPending}>
+                        <RefreshCw className={cn("mr-2 h-3.5 w-3.5", sync.isPending && "animate-spin")} /> Sync
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setBrowseTarget(provider);
+                          setBrowsePath([]);
+                        }}
+                      >
+                        <FolderOpen className="mr-2 h-3.5 w-3.5" /> Browse
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Rename"
+                        onClick={() => {
+                          setRenameTarget(provider);
+                          setRenameValue(provider.display_name || getProviderName(provider.provider_name));
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" aria-label="Move up" onClick={() => move(index, -1)} disabled={index === 0}>
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Move down"
+                        onClick={() => move(index, 1)}
+                        disabled={index === connected.length - 1}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto text-destructive"
+                        onClick={() => setDisconnectTarget(provider)}
+                      >
+                        <Unplug className="mr-2 h-3.5 w-3.5" /> Disconnect
+                      </Button>
                     </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-                    {connected && (
-                      <p className="text-xs text-muted-foreground">
-                        {connected.provider_user_email && <>Account: {connected.provider_user_email}<br /></>}
-                        {connected.total_space
-                          ? `${formatBytes(connected.used_space ?? 0)} of ${formatBytes(connected.total_space)} used`
-                          : "Quota unknown"}
-                      </p>
-                    )}
-
-                    <div className="mt-auto flex gap-2 pt-1">
-                      {connected ? (
+      {/* Catalogue */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Add a drive</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {catalogue.isLoading
+            ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-40 w-full rounded-xl" />)
+            : available.map((provider) => {
+                const Icon = getProviderIcon(provider.id);
+                const already = connectedIds.has(provider.id);
+                return (
+                  <Card key={provider.id} className="flex flex-col">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start gap-3">
+                        <Icon className="h-8 w-8 shrink-0" />
+                        <div className="min-w-0">
+                          <CardTitle className="text-base">{provider.name}</CardTitle>
+                          <CardDescription className="line-clamp-2">{provider.description}</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="mt-auto space-y-2">
+                      {!provider.configured ? (
                         <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setDisconnectTarget(connected)}
-                          >
-                            <Unplug className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Disconnect
+                          <Badge variant="outline" className="gap-1">
+                            <TriangleAlert className="h-3 w-3" /> Needs configuration
+                          </Badge>
+                          {provider.setupHint ? (
+                            <p className="text-xs text-muted-foreground">{provider.setupHint}</p>
+                          ) : null}
+                          <Button size="sm" variant="outline" className="w-full" disabled>
+                            Unavailable
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={`More options for ${provider.name}`}>
-                                <MoreVertical className="h-4 w-4" aria-hidden="true" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => void moveProvider(connected, -1)}>
-                                <ArrowDownUp className="mr-2 h-4 w-4" aria-hidden="true" /> Move up in pool order
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void moveProvider(connected, 1)}>
-                                <ArrowDownUp className="mr-2 h-4 w-4" aria-hidden="true" /> Move down in pool order
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </>
                       ) : (
                         <Button
                           size="sm"
-                          className="flex-1"
-                          onClick={() =>
-                            provider.kind === "oauth"
-                              ? (setConnecting(provider.id), void handleConnectOAuth(provider.id))
-                              : setCredentialsTarget(provider.id)
-                          }
-                          disabled={connectingBusy}
+                          className="w-full"
+                          variant={already ? "outline" : "default"}
+                          disabled={connecting === provider.id}
+                          onClick={() => {
+                            if (provider.kind === "oauth") void beginOAuth(provider);
+                            else {
+                              setCredentialTarget(provider);
+                              setCredentials({});
+                              setDisplayName("");
+                            }
+                          }}
                         >
-                          {connectingBusy && connecting === provider.id ? (
-                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                          {connecting === provider.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : already ? (
+                            <Check className="mr-2 h-4 w-4" />
                           ) : (
-                            <Cloud className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                            <Plug className="mr-2 h-4 w-4" />
                           )}
-                          Connect
+                          {already ? "Add another" : "Connect"}
                         </Button>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                      {provider.docsUrl ? (
+                        <a
+                          href={provider.docsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Provider docs <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+        </div>
+      </section>
 
-      {/* Credentials dialog for key-based providers */}
-      <Dialog open={Boolean(credentialsTarget)} onOpenChange={(open) => !open && setCredentialsTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+      {roadmap.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Coming soon</h2>
+          <div className="flex flex-wrap gap-2">
+            {roadmap.map((provider) => (
+              <Badge key={provider.id} variant="outline" className="px-3 py-1.5 text-xs font-normal">
+                {provider.name} — {provider.note}
+              </Badge>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Credentials dialog */}
+      <Dialog open={credentialTarget !== null} onOpenChange={(open) => !open && setCredentialTarget(null)}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Connect {getProviderName(credentialsTarget ?? undefined)}</DialogTitle>
+            <DialogTitle>Connect {credentialTarget?.name}</DialogTitle>
             <DialogDescription>
-              Credentials are sent to the CloudGather backend over HTTPS and stored server-side, scoped to your account.
+              Credentials are encrypted before they are stored and are never shown again.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {(getProviderMeta(credentialsTarget ?? "")?.credentialFields ?? []).map((field) => (
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              connect.mutate();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="provider-label">Display name (optional)</Label>
+              <Input
+                id="provider-label"
+                placeholder={credentialTarget?.name}
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </div>
+            {credentialTarget?.credentialFields?.map((field) => (
               <div key={field.key} className="space-y-1.5">
-                <Label htmlFor={`cred-${field.key}`}>{field.label}</Label>
+                <Label htmlFor={`field-${field.key}`}>
+                  {field.label}
+                  {field.required ? <span className="text-destructive"> *</span> : null}
+                </Label>
                 <Input
-                  id={`cred-${field.key}`}
-                  type={field.type}
+                  id={`field-${field.key}`}
+                  type={field.type === "password" ? "password" : "text"}
+                  required={field.required}
+                  placeholder={field.placeholder}
                   autoComplete="off"
-                  value={credentialValues[field.key] ?? ""}
-                  onChange={(e) => setCredentialValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                  value={credentials[field.key] ?? ""}
+                  onChange={(event) =>
+                    setCredentials((current) => ({ ...current, [field.key]: event.target.value }))
+                  }
                 />
-                {field.helpText && <p className="text-xs text-muted-foreground">{field.helpText}</p>}
+                {field.helpText ? <p className="text-xs text-muted-foreground">{field.helpText}</p> : null}
               </div>
             ))}
-            {getProviderMeta(credentialsTarget ?? "")?.docsUrl && (
-              <a
-                href={getProviderMeta(credentialsTarget ?? "")?.docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                Where do I find these? <ExternalLink className="h-3 w-3" aria-hidden="true" />
-              </a>
-            )}
-          </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCredentialTarget(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={connect.isPending}>
+                {connect.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Connect
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename dialog */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename connection</DialogTitle>
+          </DialogHeader>
+          <Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} autoFocus />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCredentialsTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleConnectCredentials()} disabled={connectingBusy}>
-              {connectingBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              Connect
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => rename.mutate()} disabled={rename.isPending || !renameValue.trim()}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Disconnect confirmation */}
-      <Dialog open={Boolean(disconnectTarget)} onOpenChange={(open) => !open && setDisconnectTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+      {/* Browse dialog */}
+      <Dialog open={browseTarget !== null} onOpenChange={(open) => !open && setBrowseTarget(null)}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Disconnect {getProviderName(disconnectTarget?.provider_name)}?</DialogTitle>
-            <DialogDescription>
-              Your stored tokens for this provider will be deleted immediately. Files already uploaded to CloudGather
-              storage stay where they are; files that live in this provider will no longer be reachable from CloudGather.
-              You can reconnect at any time.
-            </DialogDescription>
+            <DialogTitle>
+              Browse {browseTarget?.display_name || getProviderName(browseTarget?.provider_name ?? "")}
+            </DialogTitle>
+            <DialogDescription>Import files into your CloudGather library.</DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDisconnectTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => void handleDisconnect()} disabled={disconnectBusy}>
-              {disconnectBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              Disconnect
-            </Button>
-          </DialogFooter>
+
+          <nav className="flex flex-wrap items-center gap-1 text-sm">
+            <button type="button" className="rounded px-1.5 py-1 hover:bg-muted" onClick={() => setBrowsePath([])}>
+              Root
+            </button>
+            {browsePath.map((crumb, index) => (
+              <React.Fragment key={`${crumb.id}-${index}`}>
+                <span className="text-muted-foreground">/</span>
+                <button
+                  type="button"
+                  className="rounded px-1.5 py-1 hover:bg-muted"
+                  onClick={() => setBrowsePath((current) => current.slice(0, index + 1))}
+                >
+                  {crumb.name}
+                </button>
+              </React.Fragment>
+            ))}
+          </nav>
+
+          <div className="max-h-80 overflow-y-auto rounded-md border">
+            {browse.isLoading ? (
+              <div className="space-y-2 p-3">
+                {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-9 w-full" />)}
+              </div>
+            ) : browse.isError ? (
+              <p className="p-4 text-sm text-destructive">{errorMessage(browse.error)}</p>
+            ) : (browse.data?.entries.length ?? 0) === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">This folder is empty.</p>
+            ) : (
+              <ul className="divide-y">
+                {browse.data?.entries.map((entry) => (
+                  <li key={entry.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    {entry.isFolder ? (
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline"
+                        onClick={() => setBrowsePath((current) => [...current, { id: entry.id, name: entry.name }])}
+                      >
+                        <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="truncate">{entry.name}</span>
+                      </button>
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(entry.size ?? 0)}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => importFile.mutate({ entry: { id: entry.id, name: entry.name } })}
+                          disabled={importFile.isPending}
+                        >
+                          <FolderDown className="mr-2 h-3.5 w-3.5" /> Import
+                        </Button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={disconnectTarget !== null}
+        onOpenChange={(open) => !open && setDisconnectTarget(null)}
+        title={`Disconnect ${disconnectTarget?.display_name || getProviderName(disconnectTarget?.provider_name ?? "")}?`}
+        description="We'll remove the stored credentials and stop indexing this drive. Files already imported into CloudGather stay put; files that live only on the provider disappear from your library."
+        confirmLabel="Disconnect"
+        destructive
+        loading={remove.isPending}
+        onConfirm={() => disconnectTarget && remove.mutate(disconnectTarget.id)}
+      />
     </div>
   );
 };

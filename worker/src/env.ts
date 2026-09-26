@@ -65,6 +65,8 @@ export interface Env {
 
   /* ---- Abuse prevention / observability -------------------------------- */
   TURNSTILE_SECRET_KEY?: string;
+  /** Public Turnstile site key, surfaced to the frontend via /api/config. */
+  TURNSTILE_SITE_KEY?: string;
   SENTRY_DSN?: string;
   LOG_LEVEL?: string;
 }

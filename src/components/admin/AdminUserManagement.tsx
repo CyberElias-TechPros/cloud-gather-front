@@ -1,15 +1,14 @@
-import React, { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Loader2, LogOut, Search, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
-import { Search, UserPlus, UserMinus, Shield, ShieldAlert, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -18,238 +17,344 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { formatDate } from "@/lib/format";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import {
+  deleteUser,
+  listUsers,
+  revokeUserSessions,
+  sendPasswordReset,
+  updateUser,
+  type AdminUser,
+} from "@/services/admin";
+import { formatBytes, formatRelativeTime } from "@/lib/format";
+import { errorMessage } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
-interface ProfileRow {
-  id: string;
-  display_name: string | null;
-  role: string | null;
-  created_at: string;
-}
+const STATUS_VARIANT: Record<string, "secondary" | "destructive" | "outline"> = {
+  active: "secondary",
+  suspended: "destructive",
+  pending_deletion: "outline",
+};
 
-interface AdminRow {
-  id: string;
-  email: string;
-  created_at: string;
-}
-
-const emailOk = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
-const AdminUserManagement = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [isAddingAdmin, setIsAddingAdmin] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<AdminRow | null>(null);
+/** Search, inspect and administer user accounts. */
+const AdminUserManagement: React.FC = () => {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-
-  const usersQuery = useQuery({
-    queryKey: ["admin-users", searchTerm],
-    queryFn: () => api<{ users: ProfileRow[]; admins: AdminRow[] }>(`/admin/users?search=${encodeURIComponent(searchTerm)}`),
+  const { user: me } = useAuth();
+  const [search, setSearch] = React.useState("");
+  const [debounced, setDebounced] = React.useState("");
+  const [role, setRole] = React.useState("all");
+  const [status, setStatus] = React.useState("all");
+  const [page, setPage] = React.useState(1);
+  const [editing, setEditing] = React.useState<AdminUser | null>(null);
+  const [form, setForm] = React.useState<{ role: string; status: string; plan: string; quotaGb: string }>({
+    role: "user",
+    status: "active",
+    plan: "free",
+    quotaGb: "",
   });
-  const profilesQuery = { ...usersQuery, data: usersQuery.data?.users };
-  const adminUsersQuery = { ...usersQuery, data: usersQuery.data?.admins };
-  const addAdminMutation = useMutation({
-    mutationFn: (email: string) => api("/admin/users/role", { method: "POST", body: JSON.stringify({ email: email.trim().toLowerCase(), role: "admin" }) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-users"] }); toast.success("Admin added"); setNewAdminEmail(""); setIsAddingAdmin(false); },
-    onError: (error: Error) => toast.error(error.message),
+  const [deleteTarget, setDeleteTarget] = React.useState<AdminUser | null>(null);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebounced(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const users = useQuery({
+    queryKey: ["admin", "users", debounced, role, status, page],
+    queryFn: () =>
+      listUsers({
+        search: debounced || undefined,
+        role: role === "all" ? undefined : role,
+        status: status === "all" ? undefined : status,
+        page,
+      }),
   });
-  const removeAdminMutation = useMutation({
-    mutationFn: (email: string) => api("/admin/users/role", { method: "POST", body: JSON.stringify({ email, role: "user" }) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-users"] }); toast.success("Admin removed"); setRemoveTarget(null); },
-    onError: (error: Error) => toast.error(error.message),
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+  const save = useMutation({
+    mutationFn: () =>
+      updateUser(editing!.id, {
+        role: form.role,
+        status: form.status,
+        plan: form.plan,
+        storage_quota_bytes: form.quotaGb ? Math.round(Number(form.quotaGb) * 1024 ** 3) : null,
+      }),
+    onSuccess: () => {
+      toast.success("User updated");
+      setEditing(null);
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
-  const handleAddAdmin = () => {
-    if (!emailOk(newAdminEmail.trim())) {
-      toast.error("Enter a valid email address.");
-      return;
-    }
-    addAdminMutation.mutate(newAdminEmail);
-  };
+  const resetPassword = useMutation({
+    mutationFn: (id: string) => sendPasswordReset(id),
+    onSuccess: () => toast.success("Password reset email queued"),
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
-  const profiles = profilesQuery.data ?? [];
-  const adminUsers = adminUsersQuery.data ?? [];
+  const revokeSessions = useMutation({
+    mutationFn: (id: string) => revokeUserSessions(id),
+    onSuccess: (data) => toast.success(`${data.revoked} session(s) revoked`),
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
-  if (profilesQuery.isLoading || adminUsersQuery.isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-40 rounded-xl" />
-        <Skeleton className="h-72 rounded-xl" />
-      </div>
-    );
-  }
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteUser(id),
+    onSuccess: () => {
+      toast.success("Account scheduled for deletion");
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const rows = users.data?.users ?? [];
+  const pages = users.data?.pages ?? 1;
 
   return (
     <div className="space-y-4">
-      {(profilesQuery.isError || adminUsersQuery.isError) && (
-        <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Couldn&apos;t load user data</AlertTitle>
-          <AlertDescription>
-            {(profilesQuery.error as Error)?.message ?? (adminUsersQuery.error as Error)?.message} — make sure the
-            admin RLS policies from the consolidated migration are applied.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="relative sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            type="search"
-            placeholder="Search users by name…"
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            aria-label="Search users"
-          />
-        </div>
-        <Button onClick={() => setIsAddingAdmin(true)}>
-          <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" /> Add admin
-        </Button>
-      </div>
-
-      {/* Admins */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Admins</CardTitle>
-          <CardDescription>People with console access. The list is maintained in the admin_users table.</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle>Users</CardTitle>
+          <CardDescription>
+            {users.data?.total ?? 0} accounts · {users.data?.admins?.length ?? 0} administrators
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {adminUsers.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No admins configured.</p>
-          ) : (
-            adminUsers.map((admin) => {
-              const isSelf = admin.email.toLowerCase() === user?.email?.toLowerCase();
-              return (
-                <div key={admin.id} className="flex items-center justify-between gap-3 rounded-lg border p-3.5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Shield className="h-4.5 w-4.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        {admin.email}
-                        {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Admin since {formatDate(admin.created_at)}</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isSelf}
-                    title={isSelf ? "You can't remove your own admin access" : "Remove admin"}
-                    onClick={() => setRemoveTarget(admin)}
-                  >
-                    <UserMinus className="h-4 w-4" aria-hidden="true" />
-                    <span className="sr-only">Remove {admin.email}</span>
-                  </Button>
-                </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Users */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Users ({profiles.length})</CardTitle>
-          <CardDescription>Newest 200 registered users.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {profiles.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {searchTerm ? "No users match your search." : "No users registered yet."}
-            </p>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Registered users</caption>
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th scope="col" className="px-4 py-2.5 font-medium">Name</th>
-                    <th scope="col" className="px-4 py-2.5 font-medium">Role</th>
-                    <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profiles.map((profile) => (
-                    <tr key={profile.id} className="border-b last:border-0">
-                      <td className="px-4 py-2.5 font-medium">{profile.display_name || "—"}</td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant={profile.role === "admin" ? "default" : "secondary"}>{profile.role ?? "user"}</Badge>
-                      </td>
-                      <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">{formatDate(profile.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add admin dialog */}
-      <Dialog open={isAddingAdmin} onOpenChange={setIsAddingAdmin}>
-        <DialogContent className="sm:max-w-sm">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleAddAdmin();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Add admin</DialogTitle>
-              <DialogDescription>
-                The user must already have a {`CloudGather`} account with this email address.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4 space-y-1.5">
-              <Label htmlFor="admin-email">Email</Label>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                id="admin-email"
-                type="email"
-                value={newAdminEmail}
-                onChange={(e) => setNewAdminEmail(e.target.value)}
-                placeholder="user@example.com"
-                autoFocus
+                className="pl-9"
+                placeholder="Search by email or name…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={() => setIsAddingAdmin(false)}>Cancel</Button>
-              <Button type="submit" disabled={addAdminMutation.isPending}>
-                {addAdminMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                Add admin
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <Select value={role} onValueChange={(value) => { setRole(value); setPage(1); }}>
+              <SelectTrigger className="sm:w-36" aria-label="Role filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="user">Users</SelectItem>
+                <SelectItem value="admin">Admins</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={status} onValueChange={(value) => { setStatus(value); setPage(1); }}>
+              <SelectTrigger className="sm:w-40" aria-label="Status filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="pending_deletion">Pending deletion</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      {/* Remove admin confirmation */}
-      <Dialog open={Boolean(removeTarget)} onOpenChange={(open) => !open && setRemoveTarget(null)}>
-        <DialogContent className="sm:max-w-sm">
+          {users.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-12 w-full" />)}
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState className="border-0" icon={UserCog} title="No users match those filters" />
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead className="hidden md:table-cell">Plan</TableHead>
+                    <TableHead className="hidden lg:table-cell">Storage</TableHead>
+                    <TableHead className="hidden lg:table-cell">Last seen</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <p className="flex items-center gap-2 font-medium">
+                          {row.display_name || row.email.split("@")[0]}
+                          {row.role === "admin" ? (
+                            <Badge variant="outline" className="gap-1">
+                              <ShieldCheck className="h-3 w-3" /> Admin
+                            </Badge>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{row.email}</p>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell capitalize">{row.plan}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {formatBytes(row.storage_bytes)} · {row.file_count} files
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {row.last_login_at ? formatRelativeTime(row.last_login_at) : "never"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANT[row.status] ?? "outline"} className="capitalize">
+                          {row.status.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Edit user"
+                            onClick={() => {
+                              setEditing(row);
+                              setForm({
+                                role: row.role,
+                                status: row.status,
+                                plan: row.plan,
+                                quotaGb: row.storage_quota_bytes ? String(row.storage_quota_bytes / 1024 ** 3) : "",
+                              });
+                            }}
+                          >
+                            <UserCog className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Send password reset"
+                            onClick={() => resetPassword.mutate(row.id)}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Revoke sessions"
+                            onClick={() => revokeSessions.mutate(row.id)}
+                          >
+                            <LogOut className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Delete user"
+                            className="text-destructive"
+                            disabled={row.id === me?.id}
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {pages > 1 ? (
+            <div className="flex items-center justify-between text-sm">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
+                Previous
+              </Button>
+              <span className="text-muted-foreground">
+                Page {page} of {pages}
+              </span>
+              <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((current) => current + 1)}>
+                Next
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Edit dialog */}
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove admin access?</DialogTitle>
-            <DialogDescription>
-              {removeTarget?.email} will immediately lose access to the admin console and admin-only data.
-            </DialogDescription>
+            <DialogTitle>Edit {editing?.email}</DialogTitle>
+            <DialogDescription>Changes take effect immediately and are written to the audit log.</DialogDescription>
           </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Role</Label>
+              <Select value={form.role} onValueChange={(value) => setForm((current) => ({ ...current, role: value }))}>
+                <SelectTrigger id="edit-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}>
+                <SelectTrigger id="edit-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-plan">Plan</Label>
+              <Select value={form.plan} onValueChange={(value) => setForm((current) => ({ ...current, plan: value }))}>
+                <SelectTrigger id="edit-plan">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["free", "pro", "team", "enterprise"].map((plan) => (
+                    <SelectItem key={plan} value={plan} className="capitalize">
+                      {plan}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-quota">Storage override (GB)</Label>
+              <Input
+                id="edit-quota"
+                type="number"
+                min={0}
+                placeholder="Plan default"
+                value={form.quotaGb}
+                onChange={(event) => setForm((current) => ({ ...current, quotaGb: event.target.value }))}
+              />
+            </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemoveTarget(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => removeTarget && removeAdminMutation.mutate(removeTarget.email)}
-              disabled={removeAdminMutation.isPending}
-            >
-              {removeAdminMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              Remove admin
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => save.mutate()} disabled={save.isPending}>
+              {save.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`Delete ${deleteTarget?.email}?`}
+        description="The account is scheduled for deletion and all files are removed after the grace period."
+        confirmLabel="Schedule deletion"
+        destructive
+        loading={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate(deleteTarget.id)}
+      />
     </div>
   );
 };

@@ -24,13 +24,24 @@ const ContactPage = lazy(() => import("./pages/ContactPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const DevelopersPage = lazy(() => import("./pages/DevelopersPage"));
+const StatusPage = lazy(() => import("./pages/StatusPage"));
+const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
+
+const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
+const PublicLinkPage = lazy(() => import("./pages/PublicLinkPage"));
 
 const StoragePage = lazy(() => import("./pages/StoragePage"));
 const FilesPage = lazy(() => import("./pages/FilesPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
 const ApiKeysPage = lazy(() => import("./pages/ApiKeysPage"));
+const WebhooksPage = lazy(() => import("./pages/WebhooksPage"));
 const RecentsPage = lazy(() => import("./pages/RecentsPage"));
+const SharedPage = lazy(() => import("./pages/SharedPage"));
+const TrashPage = lazy(() => import("./pages/TrashPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const BillingPage = lazy(() => import("./pages/BillingPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 
 /** Scroll to top on navigation (respects back/forward popstate). */
@@ -49,15 +60,14 @@ const RouteLoading: React.FC = () => (
   </div>
 );
 
-const marketingChildren = (
-  <MarketingSuspenseWrapper />
-);
-
-function MarketingSuspenseWrapper() {
+function SuspenseOutlet() {
   return (
-    <Suspense fallback={<RouteLoading />}>
-      <Outlet />
-    </Suspense>
+    <>
+      <ScrollToTop />
+      <Suspense fallback={<RouteLoading />}>
+        <Outlet />
+      </Suspense>
+    </>
   );
 }
 
@@ -67,6 +77,20 @@ const AppLayoutBoundary: React.FC<{ children: React.ReactNode }> = ({ children }
   </ErrorBoundary>
 );
 
+/** Wraps a page in auth + app chrome + a lazy boundary. */
+const protectedRoute = (path: string, element: React.ReactNode, admin = false) => {
+  const inner = (
+    <AppLayoutBoundary>
+      <Suspense fallback={<RouteLoading />}>{element}</Suspense>
+    </AppLayoutBoundary>
+  );
+  return {
+    path,
+    element: admin ? <AdminRoute>{inner}</AdminRoute> : <ProtectedRoute>{inner}</ProtectedRoute>,
+    errorElement: <ErrorPage />,
+  };
+};
+
 const router = createBrowserRouter([
   { path: "/", element: <LandingPage />, errorElement: <ErrorPage /> },
 
@@ -74,11 +98,12 @@ const router = createBrowserRouter([
   { path: "/login", element: <AuthPage mode="login" />, errorElement: <ErrorPage /> },
   { path: "/register", element: <AuthPage mode="register" />, errorElement: <ErrorPage /> },
   { path: "/auth", element: <Navigate to="/login" replace /> },
+  { path: "/signup", element: <Navigate to="/register" replace /> },
   { path: "/reset-password", element: <ResetPasswordPage />, errorElement: <ErrorPage /> },
 
-  // Public marketing (shared suspense boundary)
+  // Public pages that load lazily (marketing + link/callback surfaces)
   {
-    element: marketingChildren,
+    element: <SuspenseOutlet />,
     errorElement: <ErrorPage />,
     children: [
       { path: "/features", element: <FeaturesPage /> },
@@ -90,114 +115,30 @@ const router = createBrowserRouter([
       { path: "/privacy", element: <PrivacyPage /> },
       { path: "/terms", element: <TermsPage /> },
       { path: "/developers", element: <DevelopersPage /> },
+      { path: "/status", element: <StatusPage /> },
+      { path: "/unsubscribe", element: <UnsubscribePage /> },
+      { path: "/auth/callback", element: <AuthCallbackPage /> },
+      { path: "/verify-email", element: <VerifyEmailPage /> },
+      { path: "/l/:token", element: <PublicLinkPage /> },
+      { path: "/s/:token", element: <PublicLinkPage /> },
     ],
   },
 
   // Authenticated app
-  {
-    path: "/dashboard",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <DashboardPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/files",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <FilesPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/storage",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <StoragePage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/providers",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <ProvidersPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/recents",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <RecentsPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/api-keys",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <ApiKeysPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/settings",
-    element: (
-      <ProtectedRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <SettingsPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </ProtectedRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
-  {
-    path: "/admin",
-    element: (
-      <AdminRoute>
-        <AppLayoutBoundary>
-          <Suspense fallback={<RouteLoading />}>
-            <AdminPage />
-          </Suspense>
-        </AppLayoutBoundary>
-      </AdminRoute>
-    ),
-    errorElement: <ErrorPage />,
-  },
+  protectedRoute("/dashboard", <DashboardPage />),
+  protectedRoute("/files", <FilesPage />),
+  protectedRoute("/files/:folderId", <FilesPage />),
+  protectedRoute("/shared", <SharedPage />),
+  protectedRoute("/trash", <TrashPage />),
+  protectedRoute("/storage", <StoragePage />),
+  protectedRoute("/providers", <ProvidersPage />),
+  protectedRoute("/recents", <RecentsPage />),
+  protectedRoute("/notifications", <NotificationsPage />),
+  protectedRoute("/api-keys", <ApiKeysPage />),
+  protectedRoute("/webhooks", <WebhooksPage />),
+  protectedRoute("/billing", <BillingPage />),
+  protectedRoute("/settings", <SettingsPage />),
+  protectedRoute("/admin", <AdminPage />, true),
 
   // 404 catch-all
   { path: "*", element: <NotFound />, errorElement: <ErrorPage /> },

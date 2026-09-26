@@ -12,6 +12,7 @@ export interface FileItem {
   is_folder?: boolean | null;
   provider_id?: string | null;
   provider_file_id?: string | null;
+  provider_name?: string | null;
   created_at: string;
   updated_at: string;
   last_accessed_at?: string | null;
@@ -19,6 +20,17 @@ export interface FileItem {
   is_shared?: boolean | null;
   parent_folder_id?: string | null;
   user_id: string;
+
+  /* Added by the platform API */
+  storage_kind?: "managed" | "provider";
+  version?: number;
+  category?: string | null;
+  tags?: string[];
+  description?: string | null;
+  download_count?: number;
+  web_url?: string | null;
+  deleted_at?: string | null;
+  purge_at?: string | null;
 }
 
 export interface FileShare {
@@ -32,7 +44,7 @@ export interface FileShare {
   expires_at?: string | null;
 }
 
-export type ProviderConnectionStatus = "connected" | "disconnected" | "error";
+export type ProviderConnectionStatus = "connected" | "disconnected" | "error" | "syncing";
 
 export interface StorageProviderInfo {
   id: string;
