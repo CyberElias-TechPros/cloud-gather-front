@@ -1,0 +1,41 @@
+# Production config for cloudgather-api (Cyber account). Generated from live
+# resource IDs; secrets are set via `wrangler secret put --config` and are
+# never written here. No [triggers]: the Cyber account is at the free-plan
+# cron cap — add them when a slot frees up (Workers Paid or reallocation).
+# DB migrations: `wrangler d1 migrations apply cloudgather --remote --config
+# wrangler.production.toml`.
+name = "cloudgather-api"
+main = "worker/src/index.ts"
+compatibility_date = "2026-09-21"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+account_id = "e543b6a0521fc8fd76447ceba097b665"
+
+[vars]
+ALLOWED_ORIGINS = "https://cloud.freegameplay.site"
+APP_URL = "https://cloud.freegameplay.site"
+API_URL = "https://cloudgather-api.cyber-e54.workers.dev/api"
+ENVIRONMENT = "production"
+SESSION_TTL_DAYS = "30"
+FROM_EMAIL = "no-reply@cloudgather.app"
+FROM_NAME = "CloudGather"
+SUPPORT_EMAIL = "support@cloudgather.app"
+BILLING_PORTAL_RETURN_PATH = "/billing"
+LOG_LEVEL = "info"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudgather"
+database_id = "3a413542-f91f-4f5a-ae45-8c384034b9e5"
+migrations_dir = "worker/migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "cloudgather-files"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "2c14e2d7f0334627ad30cfaac86535c3"
+
+[observability]
+enabled = true

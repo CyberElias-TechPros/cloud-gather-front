@@ -5,7 +5,13 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [{ "source": "/((?!assets/|favicon|icon-|apple-touch-icon|og-image|robots.txt|sitemap.xml|site.webmanifest).*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://cloudgather-api.cyber-e54.workers.dev/api/:path*"
+    },
+    { "source": "/((?!assets/|favicon|icon-|apple-touch-icon|og-image|robots.txt|sitemap.xml|site.webmanifest).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",
