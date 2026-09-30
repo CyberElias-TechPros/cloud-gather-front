@@ -1,7 +1,9 @@
-name: Deploy backend
+name: Deploy backend and frontend
 
-# Deploys cloudgather-api (Cyber account) on push to main.
-# Requires repo secrets CF_API_TOKEN + CF_ACCOUNT_ID.
+# Backend: cloudgather-api (Cyber account), CF_API_TOKEN + CF_ACCOUNT_ID.
+# Frontend: Vercel production deploy as the token owner, which bypasses the
+# Hobby collaborators block on git-triggered builds. Requires repo secrets
+# VERCEL_TOKEN + VERCEL_ORG_ID + VERCEL_PROJECT_ID.
 
 on:
   push:
@@ -9,6 +11,13 @@ on:
     paths:
       - "worker/**"
       - "wrangler.production.toml"
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "vercel.json"
       - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
@@ -45,3 +54,21 @@ jobs:
           body="$(curl -fsS https://cloudgather-api.cyber-e54.workers.dev/api/health)"
           echo "$body"
           echo "$body" | grep -q '"status":"ok"' || { echo "::error::cloudgather-api health check failed"; exit 1; }
+
+  deploy-frontend:
+    name: Deploy Vercel frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy production frontend
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: --prod
+      - name: Verify proxied API
+        run: |
+          body="$(curl -fsS https://cloud.freegameplay.site/api/health)"
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"' || { echo "::error::frontend /api proxy check failed"; exit 1; }
