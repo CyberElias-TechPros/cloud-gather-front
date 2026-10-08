@@ -11,7 +11,7 @@ import type { Env } from "../env";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export const PBKDF2_ITERATIONS = 210_000;
+export const PBKDF2_ITERATIONS = 100_000;
 
 export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
