@@ -16,7 +16,8 @@
     "cf:typecheck": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022 --types @cloudflare/workers-types worker/src/index.ts",
     "cf:migrate:local": "wrangler d1 migrations apply cloudgather --local",
     "cf:migrate:remote": "wrangler d1 migrations apply cloudgather --remote",
-    "cf:deploy": "wrangler deploy"
+    "cf:deploy": "wrangler deploy",
+    "cf:test": "vitest run --config vitest.worker.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",

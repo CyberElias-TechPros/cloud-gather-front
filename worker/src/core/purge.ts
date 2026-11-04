@@ -88,6 +88,7 @@ export async function purgeUser(env: Env, userId: string): Promise<void> {
 export async function purgeExpiredEphemera(env: Env): Promise<Record<string, number>> {
   const cleanup: [string, string][] = [
     ["sessions", "DELETE FROM sessions WHERE datetime(expires_at) < datetime('now', '-7 days') OR (revoked_at IS NOT NULL AND datetime(revoked_at) < datetime('now', '-7 days'))"],
+    ["mobile_oauth", "DELETE FROM mobile_oauth_flows WHERE datetime(expires_at) < datetime('now')"],
     ["oauth_states", "DELETE FROM oauth_states WHERE datetime(expires_at) < datetime('now')"],
     ["mfa_challenges", "DELETE FROM mfa_challenges WHERE datetime(expires_at) < datetime('now')"],
     ["password_resets", "DELETE FROM password_reset_tokens WHERE datetime(expires_at) < datetime('now', '-1 day')"],

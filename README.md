@@ -4,7 +4,16 @@
 organising, sharing and managing files across every cloud-storage account you
 already own — plus its own managed storage, a developer API and an admin console.
 
-## Stack
+## Native Android application
+
+The independent **Kotlin + Jetpack Compose** project is in [`android/`](android/README.md).
+It uses native Android screens, document pickers, sharing, Keystore and WorkManager;
+it is **not a WebView** and does not bundle this repository's React client.
+See the [Android audit and release gates](docs/ANDROID-AUDIT.md) for implementation
+coverage, validation status and remaining production work. Open `android/` in
+Android Studio. The `Native Android` workflow builds APK/AAB artifacts on CI.
+
+## Existing web client / backend stack
 
 - React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, TanStack Query
 - Vercel static frontend

@@ -29,3 +29,12 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Native Android build products and private signing material
+android/.gradle/
+android/.kotlin/
+android/**/build/
+android/local.properties
+*.jks
+*.keystore
+android/captures/
