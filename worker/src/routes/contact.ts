@@ -1,5 +1,6 @@
 /** Public contact form, newsletter sign-up and the admin-side inbox. */
 import { Router } from "../core/router";
+import type { Ctx } from "../core/context";
 import { requireAdmin, requireUser } from "../core/context";
 import { all, count, first, run } from "../core/db";
 import { badRequest, clientIp, json, noContent, notFound, readJson, userAgent } from "../core/http";
@@ -29,11 +30,16 @@ async function verifyTurnstile(secret: string | undefined, token: unknown, ip: s
 
 /* -------------------------------------------------------------- public */
 
-contactRoutes.post("/api/contact", async (ctx) => {
+async function submitContact(ctx: Ctx, authenticated = false) {
   const payload = await readJson<Record<string, unknown>>(ctx.request);
   const ip = clientIp(ctx.request);
+  if (authenticated) {
+    const user = requireUser(ctx);
+    payload.email = user.email;
+    payload.name = user.display_name?.trim().length >= 2 ? user.display_name : user.email;
+  }
 
-  if (!(await verifyTurnstile(ctx.env.TURNSTILE_SECRET_KEY, payload.turnstile_token, ip))) {
+  if (!authenticated && !(await verifyTurnstile(ctx.env.TURNSTILE_SECRET_KEY, payload.turnstile_token, ip))) {
     throw badRequest("Bot check failed. Please reload the page and try again.", "captcha_failed");
   }
   // Honeypot: real users never fill a hidden field.
@@ -90,7 +96,16 @@ contactRoutes.post("/api/contact", async (ctx) => {
   await systemAudit(ctx.env, "contact.received", { topic, email });
 
   return json({ ok: true, id: messageId, message: "Thanks — we'll reply within one business day." }, 201);
-}, {
+}
+
+// Anonymous browser submissions keep CAPTCHA; native signed-in support uses
+// server-bound identity, verified-email policy and a per-account rate limit.
+contactRoutes.post("/api/contact/mine", (ctx) => submitContact(ctx, true), {
+  auth: true, verified: true, scope: "write", maintenanceSafe: true,
+  rateLimit: { limit: 5, windowSeconds: 3600, by: "user" },
+  summary: "Create a support enquiry for the signed-in account",
+});
+contactRoutes.post("/api/contact", (ctx) => submitContact(ctx), {
   maintenanceSafe: true,
   rateLimit: { limit: 5, windowSeconds: 3600, by: "ip" },
   summary: "Submit the public contact form",

@@ -29,6 +29,7 @@ import { id } from "./core/util";
 import { capabilities, appUrl, apiUrl } from "./env";
 import { scheduled as runScheduled } from "./cron/scheduled";
 
+import { mobileRoutes } from "./routes/mobile";
 import { authRoutes } from "./routes/auth";
 import { socialRoutes } from "./routes/social";
 import { fileRoutes } from "./routes/files";
@@ -52,6 +53,7 @@ const router = new Router()
   .use(systemRoutes)
   .use(authRoutes)
   .use(socialRoutes)
+  .use(mobileRoutes)
   .use(profileRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)

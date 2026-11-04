@@ -9,6 +9,8 @@ import { audit } from "../core/audit";
 import { sendEmail, templates } from "../core/email";
 import { id, inMinutes, normalizeEmail, now } from "../core/util";
 import { apiUrl, appUrl, type Env } from "../env";
+import { loginReturnTarget, mobileFlowFromTarget } from "../core/mobileOAuth";
+import { finishMobileOAuth } from "./mobile";
 import { createSession } from "./auth";
 
 interface SocialProfile {
@@ -112,7 +114,7 @@ socialRoutes.get(
     }
 
     const state = randomToken();
-    const returnTo = ctx.url.searchParams.get("redirect") || `${appUrl(ctx.env)}/dashboard`;
+    const returnTo = loginReturnTarget(ctx.env, ctx.url.searchParams.get("redirect"));
     await run(
       ctx.env,
       "INSERT INTO oauth_states(id, state_hash, purpose, provider, user_id, redirect_uri, return_to, expires_at) VALUES(?, ?, 'login', ?, ?, ?, ?, ?)",
@@ -225,6 +227,8 @@ socialRoutes.get("/api/auth/oauth/:provider/callback", async (ctx) => {
   if (user.status === "suspended") return failure("This account has been suspended.");
 
   ctx.user = user;
+  const mobileFlow = mobileFlowFromTarget(ctx.env, stateRow.return_to || "");
+  if (mobileFlow) return finishMobileOAuth(ctx, mobileFlow, user.id);
   const session = await createSession(ctx, user, `oauth:${provider.id}`);
   await audit(ctx, { action: "user.login", resourceType: "user", resourceId: user.id, details: { provider: provider.id } });
 

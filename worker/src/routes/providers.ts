@@ -26,6 +26,7 @@ import {
   syncIndex,
   type ProviderRow,
 } from "../providers";
+import { providerReturnTarget } from "../core/mobileOAuth";
 import { ProviderError } from "../providers/types";
 import { getFolder, publicFile, uniqueName } from "./fileHelpers";
 
@@ -60,7 +61,7 @@ providerRoutes.get("/api/providers/:provider/oauth", async (ctx) => {
   assertWithinCount(entitlements.usage.providerCount, entitlements.limits.maxProviders, "connected provider", entitlements.plan.name);
 
   const state = randomToken();
-  const returnTo = ctx.url.searchParams.get("redirect") || `${appUrl(ctx.env)}/providers`;
+  const returnTo = providerReturnTarget(ctx.env, ctx.url.searchParams.get("redirect") || ctx.url.searchParams.get("return_to"));
   await run(
     ctx.env,
     "INSERT INTO oauth_states(id, state_hash, purpose, provider, user_id, redirect_uri, return_to, expires_at) VALUES(?, ?, 'connect', ?, ?, ?, ?, ?)",
